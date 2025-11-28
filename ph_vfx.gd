@@ -1,0 +1,1533 @@
+# I did this, with ChatGPT's help. - Teal
+
+extends HBModifier
+
+const LOG_NAME := "PHVFXModifier"
+
+# Last chart context, set from PreGameScreen
+static var s_last_song_id: String = ""
+static var s_last_difficulty: String = ""
+
+const NOTE_VFX_SHADER_PATH := "user://editor_scripts/Shaders/note_vfx.gdshader"
+const FULLSCREEN_SPOT_SHADER_PATH := "user://editor_scripts/Shaders/spot_overlay.gdshader"
+const PHVFXAnimBank = preload("user://editor_scripts/Utilities/ph_vfx_anim_bank.gd")
+
+const VFX_META_ORIG_MAT := "_vfx_orig_material"
+const VFX_META_SM       := "_vfx_sm"
+const SLIDE_CHAIN_MAX_HEAD_DT_MS := 400  # how far (in ms) a chain piece can look for its head
+
+const PF_ENTRY_TAG := "$PLAYFIELD"
+const PF_USE_ABSOLUTE_CHAIN := true
+
+
+var anim_bank := PHVFXAnimBank.new()
+var _bank_loaded := false
+var _note_shader: Shader = null
+
+var _current_vfx_path: String = ""
+
+var _song_ctx = null            # HBSong, resolved from statics
+var _difficulty_ctx: String = ""
+var _ctx_checked := false       # only read statics once
+
+# Per-drawer caches
+var _drawer_parts: Dictionary = {}   # Node -> parts dict
+var _drawer_key: Dictionary = {}     # Node -> key string
+var _key_remap: Dictionary = {}      # raw_key -> effective key
+# key -> cached spotlight params from anim bank
+var _spot_param_cache: Dictionary = {}
+
+# Extra: slide chain drawers under GameLayer/LAYER_SlideChainPieces
+var _slide_chain_drawers: Array[Node] = []
+var _extra_cached: bool = false
+
+# Playfield slide (field animation) state
+var _pf_rows_loaded := false
+var _pf_rows: Array = []                # [{t0, t1, endpoint: Vector2, ease: String}]
+var _pf_chain: Array = []               # [{t0, t1, base: Vector2, end: Vector2, ease}]
+var _pf_wrapper: Node2D = null          # runtime wrapper around GameLayer
+var _pf_baseline_pos: Vector2 = Vector2.ZERO
+
+# Extra: trail drawers under GameLayer/LAYER_Trails
+var _trail_drawers: Array[Node] = []
+
+# Spotlight overlay (full-screen)
+var _spot_overlay = null            # ColorRect
+var _spot_shader: Shader = null
+# Drawers that should have a spotlight following them
+var _spot_drawers: Array = []
+
+
+func _init() -> void:
+	processing_notes = true
+
+
+# ─────────────────────────────────────────────
+# Metadata
+# ─────────────────────────────────────────────
+
+static func get_modifier_name() -> String:
+	return "VFX (PH Shader Pack)"
+
+func get_modifier_list_name() -> String:
+	return get_modifier_name()
+
+static func get_modifier_description() -> String:
+	return "Applies shader-based visual effects to supported charts."
+
+
+# Same path helper as editor MegaInjector
+static func get_vfx_path_for_song(song, difficulty: String) -> String:
+	if song == null:
+		return ""
+	var sid := String(song.id)
+	var diff := difficulty.replace(" ", "_")
+	return "user://editor_songs/%s/%s_vfx.json" % [sid, diff]
+
+
+# ─────────────────────────────────────────────
+# Context from statics (PreGameScreen sets these)
+# ─────────────────────────────────────────────
+
+func _ensure_context_from_statics() -> void:
+	if _ctx_checked:
+		return
+	_ctx_checked = true
+
+	if _song_ctx != null and _difficulty_ctx != "":
+		return
+
+	if s_last_song_id == "" or s_last_difficulty == "":
+		print("%s: no static context set (s_last_song_id/s_last_difficulty empty)" % LOG_NAME)
+		return
+
+	if SongLoader.songs.has(s_last_song_id):
+		_song_ctx = SongLoader.songs[s_last_song_id]
+		_difficulty_ctx = s_last_difficulty
+		print("%s: context from statics → song_id=%s, difficulty=%s" % [
+			LOG_NAME, s_last_song_id, s_last_difficulty
+		])
+	else:
+		print("%s: static song id %s not found in SongLoader.songs" % [LOG_NAME, s_last_song_id])
+
+
+func _detect_vfx_path() -> String:
+	_ensure_context_from_statics()
+
+	# Preferred: chart-specific JSON
+	if _song_ctx != null and _difficulty_ctx != "":
+		var candidate := get_vfx_path_for_song(_song_ctx, _difficulty_ctx)
+		print("%s: candidate VFX path from song/diff: %s" % [LOG_NAME, candidate])
+		if FileAccess.file_exists(candidate):
+			print("%s: using chart-specific VFX JSON at %s" % [LOG_NAME, candidate])
+			return candidate
+		else:
+			print("%s: chart-specific JSON missing at %s" % [LOG_NAME, candidate])
+
+	# Fallback: global slot
+	var fallback_path := "user://note_vfx.json"
+	if FileAccess.file_exists(fallback_path):
+		print("%s: falling back to global VFX JSON at %s" % [LOG_NAME, fallback_path])
+		return fallback_path
+
+	print("%s: no VFX JSON found (neither chart-specific nor fallback)." % LOG_NAME)
+	return ""
+
+
+# ─────────────────────────────────────────────
+# Runtime: per-note hook (from LAYER_Notes)
+# ─────────────────────────────────────────────
+
+func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
+	var t_ms: int = int(time_sec * 1000.0)
+
+	_ensure_bank_loaded()
+	_ensure_note_shader()
+	_ensure_playfield_rows_loaded()
+
+	if anim_bank == null:
+		return
+
+	var first_drawer: Node = null
+	if not drawers.is_empty():
+		first_drawer = drawers[0] as Node
+
+	# Update field slides every tick
+	_update_playfield_slides(t_ms, first_drawer)
+
+	# If there are no drawers this frame, we're done (field already moved)
+	if drawers.is_empty():
+		return
+
+	# Things that need a concrete drawer (GameLayer climb, spotlight, slide chains)
+	if first_drawer != null:
+		_ensure_extra_drawers_cached(first_drawer)
+		_ensure_spot_overlay(first_drawer)
+
+	# Main note drawers (LAYER_Notes)
+	for d in drawers:
+		if d == null or not (d is Node):
+			continue
+
+		var nd = null
+		if d.has_method("get"):
+			nd = d.get("note_data")
+
+		var adj_factor := _get_adj_factor(nd)
+
+		var key: String = _get_effective_key_for_drawer(d)
+		if key == "":
+			continue
+
+		# If this note has SPOT rows, remember its drawer so the overlay
+		# can follow it even when it’s not in the current "drawers" batch.
+		if anim_bank.buckets_spot.has(key) and not _spot_drawers.has(d):
+			_spot_drawers.append(d)
+
+		var parts: Dictionary = _drawer_parts.get(d, {})
+		if parts.is_empty():
+			parts = _parts_for_drawer(d)
+			_init_part_state(parts)
+			_drawer_parts[d] = parts
+
+		var S: Dictionary = anim_bank._sample_scales_for_key(key, t_ms)
+		if S.is_empty():
+			continue
+		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
+		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
+		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
+
+		_apply_drawer_field_transform(d, R, O, false)
+
+		var O_rel := {
+			"head":   O.head - O.target,
+			"tail":   O.tail - O.target,
+			"target": Vector2.ZERO,
+			"hold":   O.hold - O.target,
+			"bar1":   O.bar1 - O.target,
+			"bar2":   O.bar2 - O.target,
+		}
+
+		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+
+	# Slide-chain pieces in LAYER_SlideChainPieces
+	_update_slide_chain_drawers(t_ms)
+
+	# Trails in LAYER_Trails
+	_update_trail_drawers(t_ms)
+
+	# Full-screen spotlight overlay (uses the same SPOT rows)
+	_update_spot_overlay(drawers, t_ms)
+
+
+# ─────────────────────────────────────────────
+# Bank + shader setup
+# ─────────────────────────────────────────────
+
+func _ensure_bank_loaded() -> void:
+	if _bank_loaded:
+		return
+	_bank_loaded = true
+
+	var path := _detect_vfx_path()
+	_current_vfx_path = path
+
+	if path == "":
+		push_warning("%s: No VFX JSON found for current chart." % LOG_NAME)
+		return
+
+	if not FileAccess.file_exists(path):
+		push_warning("%s: VFX JSON not found at %s" % [LOG_NAME, path])
+		return
+
+	print("%s: loading VFX bank from %s" % [LOG_NAME, path])
+
+	anim_bank.clear()
+	anim_bank.load_from_json(path)
+
+	# Reset playfield slide data for this chart
+	_pf_rows_loaded = false
+	_pf_rows.clear()
+	_pf_chain.clear()
+	_pf_wrapper = null
+	_pf_baseline_pos = Vector2.ZERO
+
+
+	var debug_keys: Array = []
+	for k in anim_bank.buckets_scale.keys():
+		debug_keys.append(k)
+		if debug_keys.size() >= 8:
+			break
+	print("%s: bank loaded, example SCALE keys: %s" % [LOG_NAME, debug_keys])
+
+
+func _ensure_note_shader() -> void:
+	if _note_shader != null:
+		return
+
+	var res := load(NOTE_VFX_SHADER_PATH)
+	if res is Shader:
+		_note_shader = res
+	else:
+		push_warning("%s: Failed to load note shader at %s" % [LOG_NAME, NOTE_VFX_SHADER_PATH])
+		_note_shader = Shader.new()
+
+
+func _get_shader() -> Shader:
+	if _note_shader == null:
+		_ensure_note_shader()
+	return _note_shader
+
+
+func _ensure_sm(ci: CanvasItem) -> ShaderMaterial:
+	if ci == null:
+		return null
+
+	if not ci.has_meta(VFX_META_ORIG_MAT):
+		ci.set_meta(VFX_META_ORIG_MAT, ci.material)
+
+	var sm := ci.material as ShaderMaterial
+	if sm == null or sm.shader == null:
+		sm = ShaderMaterial.new()
+		sm.shader = _get_shader()
+		sm.resource_local_to_scene = true
+		ci.use_parent_material = false
+		ci.material = sm
+
+	ci.set_meta(VFX_META_SM, sm)
+	return sm
+
+
+func _pivot_for(ci: CanvasItem) -> Vector2:
+	if ci is Sprite2D:
+		var s := ci as Sprite2D
+		if s.centered:
+			return Vector2.ZERO
+		if s.region_enabled:
+			return s.region_rect.size * 0.5 - s.offset
+		var sz := Vector2.ZERO
+		if s.texture != null:
+			sz = s.texture.get_size()
+		return sz * 0.5 - s.offset
+
+	if ci is Control:
+		return (ci as Control).size * 0.5
+
+	if ci.has_method("get_item_rect"):
+		var r: Rect2 = ci.call("get_item_rect")
+		return r.position + r.size * 0.5
+
+	return Vector2.ZERO
+
+
+func _set_scale(ci: CanvasItem, s: float) -> void:
+	var sm := _ensure_sm(ci)
+	if sm == null:
+		return
+	sm.set_shader_parameter("u_scale", s)
+	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
+	ci.queue_redraw()
+
+
+func _set_color(ci: CanvasItem, col: Color) -> void:
+	var sm := _ensure_sm(ci)
+	if sm == null:
+		return
+	sm.set_shader_parameter("override_color", col)
+	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
+	ci.queue_redraw()
+
+
+func _set_rotation(ci: CanvasItem, deg: float) -> void:
+	var sm := _ensure_sm(ci)
+	if sm == null:
+		return
+	sm.set_shader_parameter("u_rotation", deg_to_rad(fposmod(deg, 360.0)))
+	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
+	ci.queue_redraw()
+
+
+func _set_offset(ci: CanvasItem, ofs: Vector2) -> void:
+	var sm := _ensure_sm(ci)
+	if sm == null:
+		return
+	sm.set_shader_parameter("u_offset", ofs)
+	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
+	ci.queue_redraw()
+
+
+# ─────────────────────────────────────────────
+# Spotlight overlay helpers
+# ─────────────────────────────────────────────
+
+func _get_spot_shader() -> Shader:
+	if _spot_shader != null:
+		return _spot_shader
+
+	var res := load(FULLSCREEN_SPOT_SHADER_PATH)
+	if res is Shader:
+		_spot_shader = res
+	else:
+		push_warning("%s: Failed to load fullscreen spotlight shader at %s" % [LOG_NAME, FULLSCREEN_SPOT_SHADER_PATH])
+		_spot_shader = Shader.new()
+	return _spot_shader
+
+
+func _ensure_spot_overlay(any_drawer: Node) -> void:
+	if any_drawer == null or not any_drawer.is_inside_tree():
+		return
+
+	# Already have a valid overlay?
+	if _spot_overlay != null and _spot_overlay.is_inside_tree():
+		return
+
+	# Find GameLayer starting from this drawer
+	var cur: Node = any_drawer
+	var game_layer: Node = null
+	while cur != null:
+		if String(cur.name) == "GameLayer":
+			game_layer = cur
+			break
+		cur = cur.get_parent()
+
+	if game_layer == null:
+		return
+
+	# Find a Control ancestor to attach the overlay to.
+	# This survives even if GameLayer is wrapped in PH_PlayfieldWrapper_ALL.
+	var attach_ctrl: Control = null
+	cur = game_layer.get_parent()
+	while cur != null:
+		if cur is Control:
+			attach_ctrl = cur as Control
+			break
+		cur = cur.get_parent()
+
+	if attach_ctrl == null:
+		# No suitable Control in the chain; nothing we can safely attach to.
+		return
+
+	# Reuse existing overlay if present on that Control
+	var existing: Node = attach_ctrl.get_node_or_null("PH_SpotOverlay")
+	if existing != null and existing is ColorRect:
+		_spot_overlay = existing
+		return
+
+	# Create a new full-screen ColorRect overlay
+	var cr: ColorRect = ColorRect.new()
+	cr.name = "PH_SpotOverlay"
+	cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Full-screen anchors
+	cr.anchor_left   = 0.0
+	cr.anchor_top    = 0.0
+	cr.anchor_right  = 1.0
+	cr.anchor_bottom = 1.0
+	cr.offset_left   = 0.0
+	cr.offset_top    = 0.0
+	cr.offset_right  = 0.0
+	cr.offset_bottom = 0.0
+
+	var sm: ShaderMaterial = ShaderMaterial.new()
+	sm.shader = _get_spot_shader()
+	cr.material = sm
+
+	attach_ctrl.add_child(cr)
+	attach_ctrl.move_child(cr, attach_ctrl.get_child_count() - 1) # draw on top
+
+	_spot_overlay = cr
+
+
+func _note_drawer_to_screen_uv(d: Node, prefer_head: bool = false) -> Vector2:
+	if d == null or not d.is_inside_tree():
+		return Vector2(0.5, 0.5)
+
+	var ci: CanvasItem = null
+
+	# prefer_head=false → aim at target first
+	# prefer_head=true  → aim at Head/Note first
+	if prefer_head:
+		if d.has_node("Note"):
+			ci = d.get_node("Note") as CanvasItem
+		elif d.has_node("NoteTarget/Sprite2D"):
+			ci = d.get_node("NoteTarget/Sprite2D") as CanvasItem
+		elif d.has_node("NoteTarget"):
+			ci = d.get_node("NoteTarget") as CanvasItem
+	else:
+		if d.has_node("NoteTarget/Sprite2D"):
+			ci = d.get_node("NoteTarget/Sprite2D") as CanvasItem
+		elif d.has_node("NoteTarget"):
+			ci = d.get_node("NoteTarget") as CanvasItem
+		elif d.has_node("Note"):
+			ci = d.get_node("Note") as CanvasItem
+
+	if ci == null and d is CanvasItem:
+		ci = d as CanvasItem
+
+	if ci == null:
+		return Vector2(0.5, 0.5)
+
+	var vp: Viewport = ci.get_viewport()
+	if vp == null:
+		return Vector2(0.5, 0.5)
+
+	var rect: Rect2 = vp.get_visible_rect()
+	if rect.size.x == 0.0 or rect.size.y == 0.0:
+		return Vector2(0.5, 0.5)
+
+	var canvas_pos: Vector2 = ci.get_global_transform_with_canvas().origin
+	var canvas_xform: Transform2D = vp.get_canvas_transform()
+	var screen_pos: Vector2 = canvas_xform * canvas_pos
+
+	var uv_x: float = (screen_pos.x - rect.position.x) / rect.size.x
+	var uv_y: float = (screen_pos.y - rect.position.y) / rect.size.y
+
+	return Vector2(
+		clampf(uv_x, 0.0, 1.0),
+		clampf(uv_y, 0.0, 1.0)
+	)
+
+func _update_spotlight_for_drawer(d: Node, sm: ShaderMaterial) -> void:
+	if d == null or sm == null:
+		return
+
+	# Spot 1 (main) → target / judgment ring
+	var target_uv: Vector2 = _note_drawer_to_screen_uv(d, false)
+
+	# Spot 2 (secondary) → icon / head sprite
+	var icon_uv: Vector2 = _note_drawer_to_screen_uv(d, true)
+
+	sm.set_shader_parameter("u_spot1_center", target_uv)
+
+	sm.set_shader_parameter("u_spot2_enable", true)
+	sm.set_shader_parameter("u_spot2_center", icon_uv)
+
+	# Optional: tweak if you want a tighter icon hole
+	# sm.set_shader_parameter("u_spot2_radius", 0.08)
+	# sm.set_shader_parameter("u_spot2_soft", 0.16)
+
+
+func _update_spot_overlay(_drawers: Array, t_ms: int) -> void:
+	if _spot_overlay == null or not _spot_overlay.is_inside_tree():
+		return
+	if anim_bank == null:
+		return
+
+	var sm := _spot_overlay.material as ShaderMaterial
+	if sm == null:
+		return
+
+	# Prune dead drawers (ones that have been freed / left the tree)
+	var alive: Array = []
+	for d in _spot_drawers:
+		if d != null and d.is_inside_tree():
+			alive.append(d)
+	_spot_drawers = alive
+
+	var found_spot := false
+
+	# Keep circles round in screen space
+	var vp = _spot_overlay.get_viewport()
+	if vp != null:
+		var rect = vp.get_visible_rect()
+		if rect.size.y != 0:
+			var ratio = float(rect.size.x) / float(rect.size.y)
+			sm.set_shader_parameter("u_screen_ratio", Vector2(ratio, 1.0))
+
+	# Pick the first alive spotlight drawer and drive the overlay from it
+	for d in _spot_drawers:
+		if d == null or not d.is_inside_tree():
+			continue
+
+		var key := _get_effective_key_for_drawer(d)
+		if key == "":
+			continue
+		if not anim_bank.buckets_spot.has(key):
+			continue
+
+		# Cache static SPOT params per key (ignore time; note lifetime controls on/off)
+		if not _spot_param_cache.has(key):
+			var rows: Array = anim_bank.buckets_spot[key]
+			var radius = 0.30
+			var soft   = 0.20
+			var dim    = 0.15
+			if rows.size() > 0:
+				var r0: Dictionary = rows[0]
+				radius = float(r0.get("spot_radius", radius))
+				soft   = float(r0.get("spot_soft", soft))
+				dim    = float(r0.get("spot_dim", dim))
+			_spot_param_cache[key] = {
+				"radius": radius,
+				"soft":   soft,
+				"dim":    dim,
+			}
+
+		var spot: Dictionary = _spot_param_cache[key]
+		var radius = float(spot.get("radius", 0.30))
+		var soft   = float(spot.get("soft", 0.20))
+		var dim    = float(spot.get("dim", 0.15))  # 0 = black outside, 1 = no dim
+
+		found_spot = true
+
+		# Spot 1 → target / judgment ring
+		var target_uv: Vector2 = _note_drawer_to_screen_uv(d, false)
+		# Spot 2 → icon / head
+		var icon_uv: Vector2 = _note_drawer_to_screen_uv(d, true)
+
+		# dim is "brightness outside spot"; overlay alpha is (1 - dim)
+		var alpha: float = clamp(1.0 - dim, 0.0, 1.0)
+		var tint_col := Color(0.0, 0.0, 0.0, alpha)
+
+		sm.set_shader_parameter("u_tint", tint_col)
+
+		# Main spotlight: target
+		sm.set_shader_parameter("u_spot1_center", target_uv)
+		sm.set_shader_parameter("u_spot1_radius", radius)
+		sm.set_shader_parameter("u_spot1_soft",   soft)
+
+		# Secondary spotlight: icon / head
+		sm.set_shader_parameter("u_spot2_enable", true)
+		sm.set_shader_parameter("u_spot2_center", icon_uv)
+		sm.set_shader_parameter("u_spot2_radius", radius * 0.7)
+		sm.set_shader_parameter("u_spot2_soft",   soft * 0.7)
+
+		break  # one spotlighted note is enough
+
+	# Toggle visibility based on whether any spotlight drawer is active
+	_spot_overlay.visible = found_spot
+
+	if not found_spot:
+		# Make sure shader itself is harmless when disabled
+		sm.set_shader_parameter("u_tint", Color(0, 0, 0, 0))
+		sm.set_shader_parameter("u_spot1_radius", 0.0)
+		sm.set_shader_parameter("u_spot1_soft", 0.0)
+		sm.set_shader_parameter("u_spot2_enable", false)
+
+
+
+
+
+# ─────────────────────────────────────────────
+# Drawer → key (matching MegaInjector)
+# ─────────────────────────────────────────────
+
+func _safe_get(obj: Object, prop: String, fallback: Variant = null) -> Variant:
+	if obj == null:
+		return fallback
+
+	if obj.has_method("get_property_list"):
+		for p in obj.get_property_list():
+			if String(p.name) == prop:
+				return obj.get(prop)
+
+	if obj.has_method("has_meta") and obj.has_meta(prop):
+		return obj.get_meta(prop)
+
+	if obj.has_method("get"):
+		var v = obj.get(prop)
+		if v != null:
+			return v
+
+	return fallback
+
+
+func _is_layer2_from_obj(obj: Object) -> bool:
+	if obj == null:
+		return false
+
+	var lidx = _safe_get(obj, "layer_index", null)
+	if lidx != null and int(lidx) == 1:
+		return true
+
+	var has_flag = _safe_get(obj, "second_layer", null)
+	if has_flag != null and bool(has_flag):
+		return true
+
+	var layer_meta = _safe_get(obj, "layer", null)
+	if layer_meta != null and String(layer_meta).ends_with("2"):
+		return true
+
+	return false
+
+
+func _is_slide_chain_piece(d: Node) -> bool:
+	if d == null or not d.has_method("get"):
+		return false
+
+	var nd = d.get("note_data")
+	if nd == null:
+		return false
+
+	var obj := nd as Object
+	if obj != null and obj.has_method("is_slide_hold_piece"):
+		return obj.is_slide_hold_piece()
+
+	return false
+
+
+func _is_slide_note(d: Node) -> bool:
+	if d == null or not d.has_method("get"):
+		return false
+
+	var nd = d.get("note_data")
+	if nd == null:
+		return false
+
+	var obj := nd as Object
+	if obj == null or not obj.has_method("get"):
+		return false
+
+	var nt_v = obj.get("note_type")
+	if nt_v == null:
+		return false
+
+	var nti := int(nt_v)
+	# 4,5 = slide heads; 6,7 = slide chain/tail pieces
+	return nti == 4 or nti == 5 or nti == 6 or nti == 7
+
+
+func _key_for_drawer(d: Node) -> String:
+	if d == null or not d.has_method("get"):
+		return ""
+
+	var nd = d.get("note_data")
+	if nd == null:
+		return ""
+	if not (nd as Object).has_method("get"):
+		return ""
+
+	var nt_v = (nd as Object).get("note_type")
+	var time_v = (nd as Object).get("time")
+	if nt_v == null or time_v == null:
+		return ""
+
+	var nti := int(nt_v)
+	var head_t := int(time_v)
+
+	var lname := "UNKNOWN"
+	match nti:
+		0: lname = "UP"
+		1: lname = "LEFT"
+		2: lname = "DOWN"
+		3: lname = "RIGHT"
+		4, 6: lname = "SLIDE_LEFT"
+		5, 7: lname = "SLIDE_RIGHT"
+		8: lname = "HEART"
+
+	var is_l2 := _is_layer2_from_obj(nd) or _is_layer2_from_obj(d)
+	var layer_tag := "layer_%s%s" % [lname, ("2" if is_l2 else "")]
+
+	return "%s@%d@%d" % [layer_tag, nti, head_t]
+
+
+func _anim_bank_has_any_rows_for_key(key: String) -> bool:
+	if anim_bank == null:
+		return false
+	if anim_bank.buckets_scale.has(key):
+		return true
+	if anim_bank.buckets_color.has(key):
+		return true
+	if anim_bank.buckets_rot.has(key):
+		return true
+	if anim_bank.buckets_offset.has(key):
+		return true
+	if anim_bank.buckets_spot.has(key):
+		return true
+	return false
+
+
+func _get_effective_key_for_drawer(d: Node) -> String:
+	if d == null or not d.has_method("get") or anim_bank == null:
+		return ""
+
+	var raw_key: String
+	if _drawer_key.has(d):
+		raw_key = String(_drawer_key[d])
+	else:
+		raw_key = _key_for_drawer(d)
+		if raw_key == "":
+			return ""
+		_drawer_key[d] = raw_key
+
+	# Exact match in any bucket → use as-is.
+	if _anim_bank_has_any_rows_for_key(raw_key):
+		return raw_key
+
+	# Cached remap?
+	if _key_remap.has(raw_key):
+		return String(_key_remap[raw_key])
+
+	var effective_key := ""
+
+	# 🔸 Only *chain pieces* borrow from a slide head.
+	# Slide heads (4,5) with no rows stay vanilla.
+	if _is_slide_chain_piece(d):
+		effective_key = _find_nearest_slide_head_key(raw_key)
+	else:
+		effective_key = ""  # taps, hearts, and slide heads don't borrow
+
+	_key_remap[raw_key] = effective_key
+	return effective_key
+
+
+
+func _find_nearest_slide_head_key(chain_raw_key: String) -> String:
+	if anim_bank == null:
+		return ""
+
+	var parts := chain_raw_key.split("@")
+	if parts.size() != 3:
+		return ""
+
+	var layer_tag := String(parts[0])
+	var chain_time := int(parts[2])
+
+	var candidate_dict: Dictionary = {}
+
+	for k in anim_bank.buckets_scale.keys():
+		candidate_dict[k] = true
+	for k in anim_bank.buckets_color.keys():
+		candidate_dict[k] = true
+	for k in anim_bank.buckets_rot.keys():
+		candidate_dict[k] = true
+	for k in anim_bank.buckets_offset.keys():
+		candidate_dict[k] = true
+	for k in anim_bank.buckets_spot.keys():
+		candidate_dict[k] = true
+
+	if candidate_dict.is_empty():
+		return ""
+
+	var best_key: String = ""
+	var best_dt: int = 2147483647
+
+	for key_v in candidate_dict.keys():
+		var ks := String(key_v)
+		var kp := ks.split("@")
+		if kp.size() != 3:
+			continue
+
+		# Same lane (layer_UP, layer_SLIDE_RIGHT2, etc.)
+		if String(kp[0]) != layer_tag:
+			continue
+
+		var ntk := int(kp[1])
+		# Only slide *heads* (4,5) are valid donors
+		if ntk != 4 and ntk != 5:
+			continue
+
+		var head_time := int(kp[2])
+		var dt := abs(head_time - chain_time)
+
+		# 🔸 Don't borrow from heads that are too far away in time
+		if dt > SLIDE_CHAIN_MAX_HEAD_DT_MS:
+			continue
+
+		if dt < best_dt:
+			best_dt = dt
+			best_key = ks
+
+	# May be "" if there is no suitable head; in that case the chain piece stays vanilla.
+	return best_key
+
+# ─────────────────────────────────────────────
+# Playfield slides: load + eval
+# ─────────────────────────────────────────────
+
+func _ensure_playfield_rows_loaded() -> void:
+	if _pf_rows_loaded:
+		return
+	_pf_rows_loaded = true
+	_pf_rows.clear()
+	_pf_chain.clear()
+
+	if _current_vfx_path == "" or not FileAccess.file_exists(_current_vfx_path):
+		return
+
+	var f := FileAccess.open(_current_vfx_path, FileAccess.READ)
+	if f == null:
+		return
+	var parsed := JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_ARRAY:
+		return
+
+	for e_v in (parsed as Array):
+		if typeof(e_v) != TYPE_DICTIONARY:
+			continue
+		var e: Dictionary = e_v
+		var layer_name := String(e.get("layer", ""))
+		if layer_name != PF_ENTRY_TAG:
+			continue
+
+		var t0 := float(e.get("pf_slide_start_time", 0.0))
+		var t1 := float(e.get("pf_slide_end_time", 0.0))
+		if t1 <= t0:
+			continue
+
+		var ep_val = e.get("pf_slide_endpoint", null)
+		var endpoint := Vector2.ZERO
+		if typeof(ep_val) == TYPE_ARRAY:
+			var arr: Array = ep_val
+			if arr.size() >= 2:
+				endpoint = Vector2(float(arr[0]), float(arr[1]))
+
+		var ease := String(e.get("pf_slide_ease", "linear"))
+
+		_pf_rows.append({
+			"t0": t0,
+			"t1": t1,
+			"endpoint": endpoint,
+			"ease": ease,
+		})
+
+	# Detect seconds vs ms (same heuristic as your editor script)
+	var max_end := 0.0
+	for r in _pf_rows:
+		var e_t := float(r["t1"])
+		if e_t > max_end:
+			max_end = e_t
+	if max_end > 0.0 and max_end <= 600.0:
+		for r2 in _pf_rows:
+			r2["t0"] = float(r2["t0"]) * 1000.0
+			r2["t1"] = float(r2["t1"]) * 1000.0
+
+func _build_pf_chain() -> void:
+	_pf_chain.clear()
+	if _pf_rows.is_empty():
+		return
+
+	var prev_end: Vector2 = _pf_baseline_pos
+
+	for r in _pf_rows:
+		var t0 := float(r["t0"])
+		var t1 := float(r["t1"])
+		var base_pos := prev_end
+		var end_pos := Vector2.ZERO
+		var endpoint: Vector2 = r["endpoint"]
+
+		if PF_USE_ABSOLUTE_CHAIN:
+			end_pos = endpoint
+		else:
+			end_pos = base_pos + endpoint
+
+		_pf_chain.append({
+			"t0": t0,
+			"t1": t1,
+			"base": base_pos,
+			"end": end_pos,
+			"ease": String(r["ease"]),
+		})
+
+		prev_end = end_pos
+
+func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
+	# No rows => no wrapper
+	if _pf_rows.is_empty():
+		return
+	# Already have a wrapper?
+	if _pf_wrapper != null and _pf_wrapper.is_inside_tree():
+		return
+	# Need a live drawer to climb up to GameLayer
+	if any_drawer == null or not any_drawer.is_inside_tree():
+		return
+
+	# Walk upwards to find GameLayer
+	var cur: Node = any_drawer
+	var game_layer: Node2D = null
+	while cur != null:
+		if String(cur.name) == "GameLayer":
+			game_layer = cur as Node2D
+			break
+		cur = cur.get_parent()
+
+	if game_layer == null:
+		return
+
+	var parent: Node = game_layer.get_parent()
+	if parent == null:
+		return
+
+	var existing: Node = parent.get_node_or_null("PH_PlayfieldWrapper_RUNTIME")
+	if existing is Node2D and (existing as Node2D).is_ancestor_of(game_layer):
+		_pf_wrapper = existing as Node2D
+		_pf_baseline_pos = _pf_wrapper.position
+	else:
+		# Create wrapper and reparent GameLayer into it
+		var wrapper := Node2D.new()
+		wrapper.name = "PH_PlayfieldWrapper_RUNTIME"
+		parent.add_child(wrapper)
+		# Put wrapper where GameLayer was in the draw order
+		parent.move_child(wrapper, game_layer.get_index())
+
+		var gp: Vector2 = game_layer.get_global_position()
+		parent.remove_child(game_layer)
+		wrapper.add_child(game_layer)
+		game_layer.set_global_position(gp)
+
+		_pf_wrapper = wrapper
+		_pf_baseline_pos = _pf_wrapper.position
+
+	_build_pf_chain()
+
+
+func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
+	if _pf_rows.is_empty():
+		return
+
+	# Make sure we have a wrapper. If we already made one, we don't need a drawer.
+	if _pf_wrapper == null or not _pf_wrapper.is_inside_tree():
+		_ensure_playfield_wrapper_from_drawer(any_drawer)
+	if _pf_wrapper == null or not _pf_wrapper.is_inside_tree():
+		return
+	if _pf_chain.is_empty():
+		return
+
+	var pos := _eval_pf_pos(float(t_ms))
+	if _pf_wrapper.position != pos:
+		_pf_wrapper.position = pos
+
+
+func _progress(tnow: float, t0: float, t1: float) -> float:
+	if t1 <= t0:
+		return 1.0
+	return clamp((tnow - t0) / (t1 - t0), 0.0, 1.0)
+
+func _ease_eval(name: String, x: float) -> float:
+	var n := name.strip_edges().to_lower()
+	match n:
+		"quad_in_out":
+			if x < 0.5:
+				return 2.0 * x * x
+			var u := 1.0 - x
+			return 1.0 - 2.0 * u * u
+		"quad_in":
+			return x * x
+		"quad_out":
+			var u2 := 1.0 - x
+			return 1.0 - u2 * u2
+		"cubic_in_out":
+			if x < 0.5:
+				return 4.0 * x * x * x
+			var k := 2.0 * x - 2.0
+			return 0.5 * k * k * k + 1.0
+		_:
+			return x
+
+func _eval_pf_pos(t_ms: float) -> Vector2:
+	if _pf_chain.is_empty():
+		return _pf_baseline_pos
+	if t_ms <= float(_pf_chain[0]["t0"]):
+		return _pf_baseline_pos
+
+	var last_end: Vector2 = _pf_baseline_pos
+	for seg in _pf_chain:
+		var t0 := float(seg["t0"])
+		var t1 := float(seg["t1"])
+		var b: Vector2 = seg["base"]
+		var e: Vector2 = seg["end"]
+
+		if t_ms < t0:
+			return last_end
+		elif t_ms <= t1:
+			var pr := _progress(t_ms, t0, t1)
+			var eased := _ease_eval(String(seg["ease"]), pr)
+			return b.lerp(e, eased)
+		else:
+			last_end = e
+
+	return _pf_chain[_pf_chain.size() - 1]["end"]
+
+
+
+# ─────────────────────────────────────────────
+# Extra: discover slide-chain drawers under GameLayer
+# ─────────────────────────────────────────────
+
+func _ensure_extra_drawers_cached(any_drawer: Node) -> void:
+	if any_drawer == null or not any_drawer.is_inside_tree():
+		return
+
+	# Walk upwards to find GameLayer
+	var cur: Node = any_drawer
+	var game_layer: Node = null
+	while cur != null:
+		if String(cur.name) == "GameLayer":
+			game_layer = cur
+			break
+		cur = cur.get_parent()
+
+	if game_layer == null:
+		return
+
+	# --- Slide chain pieces ---
+	var slide_layer: Node = game_layer.get_node_or_null("LAYER_SlideChainPieces")
+	_slide_chain_drawers.clear()
+	if slide_layer != null:
+		_collect_drawers_with_note_data(slide_layer, _slide_chain_drawers)
+
+	# --- Trails ---
+	var trail_layer: Node = game_layer.get_node_or_null("LAYER_Trails")
+	_trail_drawers.clear()
+	if trail_layer != null:
+		_collect_drawers_with_note_data(trail_layer, _trail_drawers)
+
+
+func _collect_drawers_with_note_data(root: Node, out: Array) -> void:
+	if root == null:
+		return
+	if root.has_method("get"):
+		var nd = root.get("note_data")
+		if nd != null:
+			out.append(root)
+	for c in root.get_children():
+		if c is Node:
+			_collect_drawers_with_note_data(c, out)
+
+
+func _update_slide_chain_drawers(t_ms: int) -> void:
+	if anim_bank == null:
+		return
+	if _slide_chain_drawers.is_empty():
+		return
+
+	for d in _slide_chain_drawers:
+		if d == null or not d.is_inside_tree():
+			continue
+
+		var nd = null
+		if d.has_method("get"):
+			nd = d.get("note_data")
+
+		var adj_factor := _get_adj_factor(nd)
+		var key: String = _get_effective_key_for_drawer(d)
+		if key == "":
+			continue
+
+		var parts: Dictionary = _drawer_parts.get(d, {})
+		if parts.is_empty():
+			parts = _parts_for_drawer(d)
+			_init_part_state(parts)
+			_drawer_parts[d] = parts
+
+		var S: Dictionary = anim_bank._sample_scales_for_key(key, t_ms)
+		if S.is_empty():
+			continue
+		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
+		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
+		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
+
+		_apply_drawer_field_transform(d, R, O, false)
+
+		var O_rel := {
+			"head":   O.head - O.target,
+			"tail":   O.tail - O.target,
+			"target": Vector2.ZERO,
+			"hold":   O.hold - O.target,
+			"bar1":   O.bar1 - O.target,
+			"bar2":   O.bar2 - O.target,
+		}
+
+		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+
+func _update_trail_drawers(t_ms: int) -> void:
+	if anim_bank == null:
+		return
+	if _trail_drawers.is_empty():
+		return
+
+	for d in _trail_drawers:
+		if d == null or not d.is_inside_tree():
+			continue
+
+		var nd = null
+		if d.has_method("get"):
+			nd = d.get("note_data")
+
+		# Same adjacency logic as other parts
+		var adj_factor := _get_adj_factor(nd)
+
+		var key: String = _get_effective_key_for_drawer(d)
+		if key == "":
+			continue
+
+		var parts: Dictionary = _drawer_parts.get(d, {})
+		if parts.is_empty():
+			parts = _parts_for_drawer(d)
+			_init_part_state(parts)
+			_drawer_parts[d] = parts
+
+		# Same sampling as notes/slide pieces
+		var S: Dictionary = anim_bank._sample_scales_for_key(key, t_ms)
+		if S.is_empty():
+			continue
+		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
+		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
+		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
+
+		# Move whole drawer (trail) with the target offset / rotation,
+		# like we do for slide chain drawers.
+		_apply_drawer_field_transform(d, R, O, false)
+
+		var O_rel := {
+			"head":   O.head - O.target,
+			"tail":   O.tail - O.target,
+			"target": Vector2.ZERO,
+			"hold":   O.hold - O.target,
+			"bar1":   O.bar1 - O.target,
+			"bar2":   O.bar2 - O.target,
+		}
+
+		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+
+
+# ─────────────────────────────────────────────
+# Drawer parts (head / tail / target / hold)
+# ─────────────────────────────────────────────
+
+func _parts_for_drawer(d: Node) -> Dictionary:
+	var out: Dictionary = {}
+
+	out["head"] = d.get_node_or_null("Note") as CanvasItem
+	out["tail"] = d.get_node_or_null("Note2") as CanvasItem
+
+	var target_ci: CanvasItem = null
+	var nt_root := d.get_node_or_null("NoteTarget")
+	if nt_root != null:
+		var sp := nt_root.get_node_or_null("Sprite2D") as CanvasItem
+		if sp != null:
+			target_ci = sp
+		else:
+			for c in nt_root.get_children():
+				if c is CanvasItem:
+					target_ci = c
+					break
+
+	out["target"] = target_ci if target_ci != null else (nt_root as CanvasItem)
+	out["target_root"] = nt_root
+
+	var hold_nodes: Array = []
+	_collect_named(d, "HoldTextSprite", hold_nodes)
+	out["hold_nodes"] = hold_nodes
+
+	return out
+
+
+func _collect_named(root: Node, exact: String, out: Array) -> void:
+	if root == null:
+		return
+	if String(root.name) == exact:
+		out.append(root)
+	for c in root.get_children():
+		if c is Node:
+			_collect_named(c, exact, out)
+
+
+func _init_part_state(p: Dictionary) -> void:
+	if p.has("_lastS"):
+		return
+	p["_lastS"] = {
+		"h": -1.0, "t": -1.0, "tg": -1.0,
+		"b1": -1.0, "b2": -1.0, "ho": -1.0,
+	}
+	p["_lastC"] = {
+		"h": Color(9,9,9,0), "t": Color(9,9,9,0), "tg": Color(9,9,9,0),
+		"b1": Color(9,9,9,0), "b2": Color(9,9,9,0),
+		"ho": Color(9,9,9,0),
+	}
+	p["_lastR"] = {
+		"h": -9999.0, "t": -9999.0,
+		"tg": -9999.0, "ho": -9999.0,
+	}
+	p["_lastO"] = {
+		"h":  Vector2(999999, 999999),
+		"t":  Vector2(999999, 999999),
+		"tg": Vector2(999999, 999999),
+		"ho": Vector2(999999, 999999),
+		"b1": Vector2(999999, 999999),
+		"b2": Vector2(999999, 999999),
+	}
+
+
+# ─────────────────────────────────────────────
+# Drawer root transform (offset/rot)
+# ─────────────────────────────────────────────
+
+func _apply_drawer_field_transform(root: Node, R: Dictionary, O: Dictionary, use_rotation: bool = true) -> void:
+	if root == null or not (root is Node2D):
+		return
+	var n2d := root as Node2D
+
+	if not n2d.has_meta("_vfx_base_pos"):
+		n2d.set_meta("_vfx_base_pos", n2d.position)
+	if not n2d.has_meta("_vfx_base_rot"):
+		n2d.set_meta("_vfx_base_rot", n2d.rotation_degrees)
+	if not n2d.has_meta("_vfx_last_ofs"):
+		n2d.set_meta("_vfx_last_ofs", Vector2.ZERO)
+	if not n2d.has_meta("_vfx_last_rot"):
+		n2d.set_meta("_vfx_last_rot", 0.0)
+
+	var base_pos: Vector2 = n2d.get_meta("_vfx_base_pos")
+	var base_rot: float = n2d.get_meta("_vfx_base_rot")
+
+	var target_ofs: Vector2 = O.get("target", Vector2.ZERO)
+	var target_rot: float = 0.0
+	if use_rotation:
+		target_rot = float(R.get("target", 0.0))
+
+	var new_pos := base_pos + target_ofs
+	var new_rot := base_rot + target_rot
+
+	if n2d.position != new_pos:
+		n2d.position = new_pos
+	if abs(n2d.rotation_degrees - new_rot) > 0.001:
+		n2d.rotation_degrees = new_rot
+
+	n2d.set_meta("_vfx_last_ofs", target_ofs)
+	n2d.set_meta("_vfx_last_rot", target_rot)
+
+
+# ─────────────────────────────────────────────
+# Parts application (scale × adj, color, rot, offset)
+# ─────────────────────────────────────────────
+
+func _apply_parts_all(p: Dictionary, S: Dictionary, C: Dictionary, R: Dictionary, O: Dictionary, adj_factor: float) -> void:
+	if p.is_empty():
+		return
+
+	var LS: Dictionary = p["_lastS"]
+	var LC: Dictionary = p["_lastC"]
+	var LR: Dictionary = p["_lastR"]
+	var LO: Dictionary = p["_lastO"]
+
+	var head: CanvasItem = p.get("head", null)
+	var tail: CanvasItem = p.get("tail", null)
+	var target_root: Node = p.get("target_root", null)
+	var target_ci: CanvasItem = p.get("target", null)
+	var hold_nodes: Array = p.get("hold_nodes", [])
+
+	# SCALE (with adjacency)
+	var head_scale: float = float(S.head) * adj_factor
+	var tail_scale: float = float(S.tail) * adj_factor
+	var target_scale: float = float(S.target) * adj_factor
+	var bar1_scale: float = float(S.bar1) * adj_factor
+	var bar2_scale: float = float(S.bar2) * adj_factor
+	var hold_scale: float = float(S.hold) * adj_factor
+
+	if head != null and LS["h"] != head_scale:
+		_set_scale(head, head_scale)
+		LS["h"] = head_scale
+
+	if tail != null and LS["t"] != tail_scale:
+		_set_scale(tail, tail_scale)
+		LS["t"] = tail_scale
+
+	if target_root != null:
+		for child in (target_root as Node).get_children():
+			if not (child is CanvasItem):
+				continue
+			var cname := String(child.name).to_lower()
+			if cname.findn("sprite") != -1 or cname.findn("target") != -1:
+				if LS["tg"] != target_scale:
+					_set_scale(child, target_scale)
+					LS["tg"] = target_scale
+			elif cname.findn("timingarm2") != -1:
+				if LS["b2"] != bar2_scale:
+					_set_scale(child, bar2_scale)
+					LS["b2"] = bar2_scale
+			elif cname.findn("timingarm") != -1 or cname.findn("bar") != -1:
+				if LS["b1"] != bar1_scale:
+					_set_scale(child, bar1_scale)
+					LS["b1"] = bar1_scale
+
+	for h in hold_nodes:
+		if h is CanvasItem and LS["ho"] != hold_scale:
+			_set_scale(h, hold_scale)
+			LS["ho"] = hold_scale
+
+	# COLOR
+	if head != null and LC["h"] != C.head:
+		_set_color(head, C.head)
+		LC["h"] = C.head
+
+	if tail != null and LC["t"] != C.tail:
+		_set_color(tail, C.tail)
+		LC["t"] = C.tail
+
+	if target_root != null:
+		for child2 in (target_root as Node).get_children():
+			if not (child2 is CanvasItem):
+				continue
+			var cname2 := String(child2.name).to_lower()
+			if cname2.findn("timingarm2") != -1:
+				if LC["b2"] != C.bar2:
+					_set_color(child2, C.bar2)
+					LC["b2"] = C.bar2
+			elif cname2.findn("timingarm") != -1 or cname2.findn("bar") != -1:
+				if LC["b1"] != C.bar1:
+					_set_color(child2, C.bar1)
+					LC["b1"] = C.bar1
+			elif cname2.findn("sprite") != -1 or cname2.findn("target") != -1:
+				if LC["tg"] != C.target:
+					_set_color(child2, C.target)
+					LC["tg"] = C.target
+			else:
+				if target_root is CanvasItem:
+					var prev_root_col: Color = LC.get("tg_root", Color(9,9,9,0))
+					if prev_root_col != C.target:
+						_set_color(target_root, C.target)
+						LC["tg_root"] = C.target
+
+	for h2 in hold_nodes:
+		if h2 is CanvasItem and LC["ho"] != C.hold:
+			_set_color(h2, C.hold)
+			LC["ho"] = C.hold
+
+	# ROTATION
+	if head != null and LR["h"] != R.head:
+		_set_rotation(head, R.head)
+		LR["h"] = R.head
+
+	if tail != null and LR["t"] != R.tail:
+		_set_rotation(tail, R.tail)
+		LR["t"] = R.tail
+
+	if target_ci != null and LR["tg"] != R.target:
+		_set_rotation(target_ci, R.target)
+		LR["tg"] = R.target
+
+	for h3 in hold_nodes:
+		if h3 is CanvasItem and LR["ho"] != R.hold:
+			_set_rotation(h3, R.hold)
+			LR["ho"] = R.hold
+
+	# OFFSET
+	if head != null and LO["h"] != O.head:
+		_set_offset(head, O.head)
+		LO["h"] = O.head
+
+	if tail != null and LO["t"] != O.tail:
+		_set_offset(tail, O.tail)
+		LO["t"] = O.tail
+
+	if target_ci != null and LO["tg"] != O.target:
+		_set_offset(target_ci, O.target)
+		LO["tg"] = O.target
+
+	for h4 in hold_nodes:
+		if h4 is CanvasItem and LO["ho"] != O.hold:
+			_set_offset(h4, O.hold)
+			LO["ho"] = O.hold
+
+	if target_root != null:
+		for child3 in (target_root as Node).get_children():
+			if not (child3 is CanvasItem):
+				continue
+			var cname3 := String(child3.name).to_lower()
+			if cname3.findn("timingarm2") != -1:
+				if LO["b2"] != O.bar2:
+					_set_offset(child3, O.bar2)
+					LO["b2"] = O.bar2
+			elif cname3.findn("timingarm") != -1 or cname3.findn("bar") != -1:
+				if LO["b1"] != O.bar1:
+					_set_offset(child3, O.bar1)
+					LO["b1"] = O.bar1
+
+
+# ─────────────────────────────────────────────
+# Adjacency: shrink tight note clusters
+# ─────────────────────────────────────────────
+
+func _mark_adjacent_notes(points: Array) -> void:
+	var heads: Array = []
+
+	for p in points:
+		if p is HBNoteData:
+			var nd = p
+			heads.append({
+				"note": nd,
+				"time": nd.time
+			})
+
+	if heads.size() < 2:
+		return
+
+	heads.sort_custom(func(a, b):
+		return int(a["time"]) < int(b["time"])
+	)
+
+	var threshold := 90
+	var current_group: Array = []
+	var last_time = null
+
+	for i in range(heads.size()):
+		var h = heads[i]
+		var t = int(h["time"])
+
+		if last_time == null:
+			current_group.clear()
+			current_group.append(h)
+		else:
+			if abs(t - last_time) <= threshold:
+				current_group.append(h)
+			else:
+				_apply_adjacent_group(current_group)
+				current_group.clear()
+				current_group.append(h)
+
+		last_time = t
+
+	_apply_adjacent_group(current_group)
+
+
+func _apply_adjacent_group(group: Array) -> void:
+	if group.size() <= 1:
+		return
+
+	var factor := 0.9
+	if group.size() >= 3:
+		factor = 0.85
+
+	for h in group:
+		var nd = h["note"]
+		if nd != null and (nd as Object).has_method("set_meta"):
+			(nd as Object).set_meta("phvfx_adj_factor", factor)
+
+
+func _get_adj_factor(nd) -> float:
+	if nd == null:
+		return 1.0
+	var obj := nd as Object
+	if obj.has_method("has_meta") and obj.has_meta("phvfx_adj_factor"):
+		var v = obj.get_meta("phvfx_adj_factor")
+		if v != null:
+			return float(v)
+	return 1.0
+
+
+# ─────────────────────────────────────────────
+# Chart hook
+# ─────────────────────────────────────────────
+
+func _preprocess_timing_points(points: Array) -> Array:
+	# New chart incoming – reset runtime caches
+	_bank_loaded = false
+	anim_bank.clear()
+	_current_vfx_path = ""
+	_key_remap.clear()
+	_drawer_parts.clear()
+	_drawer_key.clear()
+	_slide_chain_drawers.clear()
+	_extra_cached = false
+	_spot_drawers.clear()
+	_spot_param_cache.clear()
+
+	# Playfield slides
+	_pf_rows_loaded = false
+	_pf_rows.clear()
+	_pf_chain.clear()
+	_pf_wrapper = null
+	_pf_baseline_pos = Vector2.ZERO
+
+	_mark_adjacent_notes(points)
+	return points
