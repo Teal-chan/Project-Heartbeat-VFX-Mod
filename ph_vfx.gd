@@ -1,8 +1,9 @@
 # I did this, with ChatGPT's help. - Teal
 
+
 extends HBModifier
 
-const LOG_NAME := "PHVFXModifier"
+const LOG_NAME := "MightyModifier"
 
 # Last chart context, set from PreGameScreen
 static var s_last_song_id: String = ""
@@ -18,6 +19,7 @@ const SLIDE_CHAIN_MAX_HEAD_DT_MS := 400  # how far (in ms) a chain piece can loo
 
 const PF_ENTRY_TAG := "$PLAYFIELD"
 const PF_USE_ABSOLUTE_CHAIN := true
+
 
 
 var anim_bank := PHVFXAnimBank.new()
@@ -83,6 +85,44 @@ static func get_vfx_path_for_song(song, difficulty: String) -> String:
 	var sid := String(song.id)
 	var diff := difficulty.replace(" ", "_")
 	return "user://editor_songs/%s/%s_vfx.json" % [sid, diff]
+
+# ─────────────────────────────────────────────
+# Static helpers for menus / tools
+# ─────────────────────────────────────────────
+
+static var _song_vfx_cache: Dictionary = {}
+
+static func has_any_vfx_for_song(song: HBSong) -> bool:
+	if song == null:
+		return false
+
+	var sid := String(song.id)
+	if _song_vfx_cache.has(sid):
+		return bool(_song_vfx_cache[sid])
+
+	# Look for any *_vfx.json file under user://editor_songs/<song_id>/
+	var dir_path := "user://editor_songs/%s" % sid
+	var has := false
+
+	if DirAccess.dir_exists_absolute(dir_path):
+		var d := DirAccess.open(dir_path)
+		if d != null:
+			d.list_dir_begin()
+			var fname := d.get_next()
+			while fname != "":
+				if not d.current_is_dir() and fname.to_lower().ends_with("_vfx.json"):
+					has = true
+					break
+				fname = d.get_next()
+			d.list_dir_end()
+
+	_song_vfx_cache[sid] = has
+	return has
+
+
+static func clear_vfx_cache() -> void:
+	_song_vfx_cache.clear()
+
 
 
 # ─────────────────────────────────────────────
@@ -240,8 +280,6 @@ func _ensure_bank_loaded() -> void:
 		push_warning("%s: VFX JSON not found at %s" % [LOG_NAME, path])
 		return
 
-	print("%s: loading VFX bank from %s" % [LOG_NAME, path])
-
 	anim_bank.clear()
 	anim_bank.load_from_json(path)
 
@@ -258,7 +296,7 @@ func _ensure_bank_loaded() -> void:
 		debug_keys.append(k)
 		if debug_keys.size() >= 8:
 			break
-	print("%s: bank loaded, example SCALE keys: %s" % [LOG_NAME, debug_keys])
+
 
 
 func _ensure_note_shader() -> void:
