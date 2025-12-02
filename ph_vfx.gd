@@ -1,6 +1,5 @@
 # I did this, with ChatGPT's help. - Teal
 
-
 extends HBModifier
 
 const LOG_NAME := "MightyModifier"
@@ -59,6 +58,23 @@ var _spot_shader: Shader = null
 # Drawers that should have a spotlight following them
 var _spot_drawers: Array = []
 
+# Mirai link lines (runtime)
+const MIRAI_LINE_NODE_NAME := "PH_MiraiLinkLines_RUNTIME"
+
+# each entry:
+# {
+#   head_key: String,
+#   tail_key: String,
+#   head_time: int,
+#   tail_time: int,
+#   head_drawer: Node,
+#   tail_drawer: Node,
+#   line: Line2D
+# }
+var _mirai_links: Array = []
+var _mirai_line_root: Node2D = null
+var _mirai_rows_loaded := false
+var _mirai_last_t_ms: int = 0   # last known song time in ms (for Mirai lifetime)
 
 func _init() -> void:
 	processing_notes = true
@@ -180,10 +196,12 @@ func _detect_vfx_path() -> String:
 
 func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 	var t_ms: int = int(time_sec * 1000.0)
+	_mirai_last_t_ms = t_ms  # cache current time for Mirai links
 
 	_ensure_bank_loaded()
 	_ensure_note_shader()
 	_ensure_playfield_rows_loaded()
+	_ensure_mirai_rows_loaded()
 
 	if anim_bank == null:
 		return
@@ -195,14 +213,17 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 	# Update field slides every tick
 	_update_playfield_slides(t_ms, first_drawer)
 
-	# If there are no drawers this frame, we're done (field already moved)
+	# If there are no drawers this frame, we still want Mirai lines
+	# to get a chance to despawn based on time / dead notes.
 	if drawers.is_empty():
+		_update_mirai_lines_runtime()
 		return
 
 	# Things that need a concrete drawer (GameLayer climb, spotlight, slide chains)
 	if first_drawer != null:
 		_ensure_extra_drawers_cached(first_drawer)
 		_ensure_spot_overlay(first_drawer)
+		_ensure_mirai_line_root(first_drawer)
 
 	# Main note drawers (LAYER_Notes)
 	for d in drawers:
@@ -259,6 +280,11 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 	# Full-screen spotlight overlay (uses the same SPOT rows)
 	_update_spot_overlay(drawers, t_ms)
 
+	# Mirai link lines (runtime, JSON-driven)
+	_update_mirai_link_drawer_refs(drawers)
+	_update_mirai_lines_runtime()
+
+
 
 # ─────────────────────────────────────────────
 # Bank + shader setup
@@ -290,13 +316,16 @@ func _ensure_bank_loaded() -> void:
 	_pf_wrapper = null
 	_pf_baseline_pos = Vector2.ZERO
 
+	# Mirai rows will be (re)loaded lazily
+	_mirai_rows_loaded = false
+	_mirai_links.clear()
+	_mirai_line_root = null
 
 	var debug_keys: Array = []
 	for k in anim_bank.buckets_scale.keys():
 		debug_keys.append(k)
 		if debug_keys.size() >= 8:
 			break
-
 
 
 func _ensure_note_shader() -> void:
@@ -525,6 +554,7 @@ func _note_drawer_to_screen_uv(d: Node, prefer_head: bool = false) -> Vector2:
 		clampf(uv_y, 0.0, 1.0)
 	)
 
+
 func _update_spotlight_for_drawer(d: Node, sm: ShaderMaterial) -> void:
 	if d == null or sm == null:
 		return
@@ -539,10 +569,6 @@ func _update_spotlight_for_drawer(d: Node, sm: ShaderMaterial) -> void:
 
 	sm.set_shader_parameter("u_spot2_enable", true)
 	sm.set_shader_parameter("u_spot2_center", icon_uv)
-
-	# Optional: tweak if you want a tighter icon hole
-	# sm.set_shader_parameter("u_spot2_radius", 0.08)
-	# sm.set_shader_parameter("u_spot2_soft", 0.16)
 
 
 func _update_spot_overlay(_drawers: Array, t_ms: int) -> void:
@@ -601,9 +627,9 @@ func _update_spot_overlay(_drawers: Array, t_ms: int) -> void:
 			}
 
 		var spot: Dictionary = _spot_param_cache[key]
-		var radius = float(spot.get("radius", 0.30))
-		var soft   = float(spot.get("soft", 0.20))
-		var dim    = float(spot.get("dim", 0.15))  # 0 = black outside, 1 = no dim
+		var radius2 = float(spot.get("radius", 0.30))
+		var soft2   = float(spot.get("soft", 0.20))
+		var dim2    = float(spot.get("dim", 0.15))  # 0 = black outside, 1 = no dim
 
 		found_spot = true
 
@@ -613,21 +639,21 @@ func _update_spot_overlay(_drawers: Array, t_ms: int) -> void:
 		var icon_uv: Vector2 = _note_drawer_to_screen_uv(d, true)
 
 		# dim is "brightness outside spot"; overlay alpha is (1 - dim)
-		var alpha: float = clamp(1.0 - dim, 0.0, 1.0)
+		var alpha: float = clamp(1.0 - dim2, 0.0, 1.0)
 		var tint_col := Color(0.0, 0.0, 0.0, alpha)
 
 		sm.set_shader_parameter("u_tint", tint_col)
 
 		# Main spotlight: target
 		sm.set_shader_parameter("u_spot1_center", target_uv)
-		sm.set_shader_parameter("u_spot1_radius", radius)
-		sm.set_shader_parameter("u_spot1_soft",   soft)
+		sm.set_shader_parameter("u_spot1_radius", radius2)
+		sm.set_shader_parameter("u_spot1_soft",   soft2)
 
 		# Secondary spotlight: icon / head
 		sm.set_shader_parameter("u_spot2_enable", true)
 		sm.set_shader_parameter("u_spot2_center", icon_uv)
-		sm.set_shader_parameter("u_spot2_radius", radius * 0.7)
-		sm.set_shader_parameter("u_spot2_soft",   soft * 0.7)
+		sm.set_shader_parameter("u_spot2_radius", radius2 * 0.7)
+		sm.set_shader_parameter("u_spot2_soft",   soft2 * 0.7)
 
 		break  # one spotlighted note is enough
 
@@ -641,6 +667,261 @@ func _update_spot_overlay(_drawers: Array, t_ms: int) -> void:
 		sm.set_shader_parameter("u_spot1_soft", 0.0)
 		sm.set_shader_parameter("u_spot2_enable", false)
 
+
+
+# ─────────────────────────────────────────────
+# Mirai link runtime helpers (JSON-driven)
+# ─────────────────────────────────────────────
+
+func _ensure_mirai_rows_loaded() -> void:
+	if _mirai_rows_loaded:
+		return
+	_mirai_rows_loaded = true
+	_mirai_links.clear()
+	_mirai_line_root = null
+
+	if _current_vfx_path == "" or not FileAccess.file_exists(_current_vfx_path):
+		return
+
+	var f := FileAccess.open(_current_vfx_path, FileAccess.READ)
+	if f == null:
+		return
+	var parsed := JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_ARRAY:
+		return
+
+	for e_v in (parsed as Array):
+		if typeof(e_v) != TYPE_DICTIONARY:
+			continue
+		var e: Dictionary = e_v
+		if String(e.get("layer", "")) != "$MIRAI_LINK":
+			continue
+
+		var head_key := String(e.get("head_key", ""))
+		var tail_key := String(e.get("tail_key", ""))
+		if head_key == "" or tail_key == "":
+			continue
+
+		# We still read times, but we won't rely on them for lifetime.
+		var head_time := int(e.get("head_time", 0))
+		var tail_time := int(e.get("tail_time", 0))
+
+		_mirai_links.append({
+			"head_key": head_key,
+			"tail_key": tail_key,
+			"head_time": head_time,
+			"tail_time": tail_time,
+			"head_drawer": null,
+			"tail_drawer": null,
+			"head_note": null,
+			"tail_note": null,
+			"line": null,
+		})
+
+
+
+func _ensure_mirai_line_root(any_drawer: Node) -> void:
+	if _mirai_line_root != null and _mirai_line_root.is_inside_tree():
+		return
+	if any_drawer == null or not any_drawer.is_inside_tree():
+		return
+
+	# Climb to GameLayer
+	var cur: Node = any_drawer
+	var game_layer: Node = null
+	while cur != null:
+		if String(cur.name) == "GameLayer":
+			game_layer = cur
+			break
+		cur = cur.get_parent()
+
+	if game_layer == null:
+		return
+
+	var parent: Node = game_layer
+	var existing := parent.get_node_or_null(MIRAI_LINE_NODE_NAME)
+	if existing is Node2D:
+		_mirai_line_root = existing
+		return
+
+	var container := Node2D.new()
+	container.name = MIRAI_LINE_NODE_NAME
+	parent.add_child(container)
+
+	# Try to position and z-order it just behind LAYER_Notes
+	var notes_layer := parent.get_node_or_null("LAYER_Notes")
+
+	if notes_layer != null:
+		# Put container right before LAYER_Notes in the tree
+		parent.move_child(container, notes_layer.get_index())
+
+		# And make sure its z_index is just below LAYER_Notes so it draws behind
+		if notes_layer is Node2D:
+			var notes2d := notes_layer as Node2D
+			container.z_as_relative = notes2d.z_as_relative
+			container.z_index = notes2d.z_index - 1
+	else:
+		# Fallback: put it at the very front (we'll still control z_index if needed)
+		parent.move_child(container, 0)
+
+	_mirai_line_root = container
+
+
+
+
+func _update_mirai_link_drawer_refs(drawers: Array) -> void:
+	if _mirai_links.is_empty():
+		return
+
+	var any_drawer: Node = null
+	if not drawers.is_empty():
+		any_drawer = drawers[0] as Node
+
+	if _mirai_line_root == null or not _mirai_line_root.is_inside_tree():
+		_ensure_mirai_line_root(any_drawer)
+	if _mirai_line_root == null or not _mirai_line_root.is_inside_tree():
+		return
+
+	for d_v in drawers:
+		var d: Node = d_v
+		if d == null or not d.is_inside_tree() or not d.has_method("get"):
+			continue
+
+		var nd = d.get("note_data")
+		if nd == null:
+			continue
+
+		# Use raw key so Mirai links don't depend on VFX anim-bank rows
+		var raw_key := _key_for_drawer(d)
+		if raw_key == "":
+			continue
+
+		# Ensure parts cached for later head lookup
+		if not _drawer_parts.has(d):
+			var parts := _parts_for_drawer(d)
+			_init_part_state(parts)
+			_drawer_parts[d] = parts
+
+		for i in range(_mirai_links.size()):
+			var link: Dictionary = _mirai_links[i]
+
+			# Bind head
+			if link["head_drawer"] == null and link["head_key"] == raw_key:
+				link["head_drawer"] = d
+				link["head_note"] = nd
+
+			# Bind tail
+			if link["tail_drawer"] == null and link["tail_key"] == raw_key:
+				link["tail_drawer"] = d
+				link["tail_note"] = nd
+
+			_mirai_links[i] = link
+
+
+func _update_mirai_lines_runtime() -> void:
+	if _mirai_links.is_empty():
+		return
+	if _mirai_line_root == null or not _mirai_line_root.is_inside_tree():
+		return
+
+	for i in range(_mirai_links.size()):
+		var link: Dictionary = _mirai_links[i]
+		var first_d: Node = link["head_drawer"]
+		var last_d: Node = link["tail_drawer"]
+		var head_note = link.get("head_note", null)
+		var tail_note = link.get("tail_note", null)
+		var line: Line2D = link["line"]
+
+		var kill_link := false
+
+		# 1) Validate head drawer + note identity
+		if head_note != null:
+			if first_d == null or not is_instance_valid(first_d) or not first_d.is_inside_tree():
+				kill_link = true
+			elif not first_d.has_method("get") or first_d.get("note_data") != head_note:
+				# Drawer got reused for another note
+				kill_link = true
+
+		# 2) Validate tail drawer + note identity
+		if not kill_link and tail_note != null:
+			if last_d == null or not is_instance_valid(last_d) or not last_d.is_inside_tree():
+				kill_link = true
+			elif not last_d.has_method("get") or last_d.get("note_data") != tail_note:
+				kill_link = true
+
+		# 3) If invalid for any reason → nuke line and clear refs
+		if kill_link:
+			if line != null and is_instance_valid(line):
+				line.queue_free()
+			link["line"] = null
+			link["head_drawer"] = null
+			link["tail_drawer"] = null
+			link["head_note"] = null
+			link["tail_note"] = null
+			_mirai_links[i] = link
+			continue
+
+		# Still waiting for both ends? Nothing to draw yet
+		if first_d == null or last_d == null or head_note == null or tail_note == null:
+			if line != null and is_instance_valid(line):
+				line.visible = false
+			_mirai_links[i] = link
+			continue
+
+		# 4) We have valid endpoints → ensure a Line2D exists
+		if line == null or not is_instance_valid(line):
+			line = Line2D.new()
+			line.name = "PH_MiraiLinkLine"
+			line.width = 6.0
+			line.default_color = Color(1.0, 1.0, 1.0, 0.85)
+			line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			line.end_cap_mode = Line2D.LINE_CAP_ROUND
+			line.antialiased = true
+			_mirai_line_root.add_child(line)
+			_mirai_line_root.move_child(line, 0)
+			link["line"] = line
+
+		# 5) Ensure part caches exist (for anchors)
+		var parts1: Dictionary = _drawer_parts.get(first_d, {})
+		if parts1.is_empty():
+			parts1 = _parts_for_drawer(first_d)
+			_init_part_state(parts1)
+			_drawer_parts[first_d] = parts1
+
+		var parts2: Dictionary = _drawer_parts.get(last_d, {})
+		if parts2.is_empty():
+			parts2 = _parts_for_drawer(last_d)
+			_init_part_state(parts2)
+			_drawer_parts[last_d] = parts2
+
+		# Anchors: prefer target (judgement ring), fallback to head if missing
+		var anchor1: CanvasItem = parts1.get("target", null)
+		if anchor1 == null:
+			anchor1 = parts1.get("head", null)
+
+		var anchor2: CanvasItem = parts2.get("target", null)
+		if anchor2 == null:
+			anchor2 = parts2.get("head", null)
+
+		if anchor1 == null or anchor2 == null:
+			if line != null and is_instance_valid(line):
+				line.visible = false
+			_mirai_links[i] = link
+			continue
+
+		# 6) Position the line between the two anchors (targets)
+		var pos1: Vector2 = anchor1.get_global_transform_with_canvas().origin
+		var pos2: Vector2 = anchor2.get_global_transform_with_canvas().origin
+
+		var inv_tf: Transform2D = line.get_global_transform_with_canvas().affine_inverse()
+		var p1_local: Vector2 = inv_tf * pos1
+		var p2_local: Vector2 = inv_tf * pos2
+
+		line.points = PackedVector2Array([p1_local, p2_local])
+		line.visible = true
+
+		_mirai_links[i] = link
 
 
 
@@ -797,8 +1078,7 @@ func _get_effective_key_for_drawer(d: Node) -> String:
 
 	var effective_key := ""
 
-	# 🔸 Only *chain pieces* borrow from a slide head.
-	# Slide heads (4,5) with no rows stay vanilla.
+	# Only *chain pieces* borrow from a slide head.
 	if _is_slide_chain_piece(d):
 		effective_key = _find_nearest_slide_head_key(raw_key)
 	else:
@@ -806,7 +1086,6 @@ func _get_effective_key_for_drawer(d: Node) -> String:
 
 	_key_remap[raw_key] = effective_key
 	return effective_key
-
 
 
 func _find_nearest_slide_head_key(chain_raw_key: String) -> String:
@@ -857,7 +1136,7 @@ func _find_nearest_slide_head_key(chain_raw_key: String) -> String:
 		var head_time := int(kp[2])
 		var dt := abs(head_time - chain_time)
 
-		# 🔸 Don't borrow from heads that are too far away in time
+		# Don't borrow from heads that are too far away in time
 		if dt > SLIDE_CHAIN_MAX_HEAD_DT_MS:
 			continue
 
@@ -865,8 +1144,9 @@ func _find_nearest_slide_head_key(chain_raw_key: String) -> String:
 			best_dt = dt
 			best_key = ks
 
-	# May be "" if there is no suitable head; in that case the chain piece stays vanilla.
 	return best_key
+
+
 
 # ─────────────────────────────────────────────
 # Playfield slides: load + eval
@@ -930,6 +1210,7 @@ func _ensure_playfield_rows_loaded() -> void:
 			r2["t0"] = float(r2["t0"]) * 1000.0
 			r2["t1"] = float(r2["t1"]) * 1000.0
 
+
 func _build_pf_chain() -> void:
 	_pf_chain.clear()
 	if _pf_rows.is_empty():
@@ -958,6 +1239,7 @@ func _build_pf_chain() -> void:
 		})
 
 		prev_end = end_pos
+
 
 func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 	# No rows => no wrapper
@@ -1031,6 +1313,7 @@ func _progress(tnow: float, t0: float, t1: float) -> float:
 		return 1.0
 	return clamp((tnow - t0) / (t1 - t0), 0.0, 1.0)
 
+
 func _ease_eval(name: String, x: float) -> float:
 	var n := name.strip_edges().to_lower()
 	match n:
@@ -1051,6 +1334,7 @@ func _ease_eval(name: String, x: float) -> float:
 			return 0.5 * k * k * k + 1.0
 		_:
 			return x
+
 
 func _eval_pf_pos(t_ms: float) -> Vector2:
 	if _pf_chain.is_empty():
@@ -1168,6 +1452,7 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 
 		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
 
+
 func _update_trail_drawers(t_ms: int) -> void:
 	if anim_bank == null:
 		return
@@ -1217,6 +1502,7 @@ func _update_trail_drawers(t_ms: int) -> void:
 		}
 
 		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+
 
 
 # ─────────────────────────────────────────────
@@ -1287,6 +1573,7 @@ func _init_part_state(p: Dictionary) -> void:
 	}
 
 
+
 # ─────────────────────────────────────────────
 # Drawer root transform (offset/rot)
 # ─────────────────────────────────────────────
@@ -1323,6 +1610,7 @@ func _apply_drawer_field_transform(root: Node, R: Dictionary, O: Dictionary, use
 
 	n2d.set_meta("_vfx_last_ofs", target_ofs)
 	n2d.set_meta("_vfx_last_rot", target_rot)
+
 
 
 # ─────────────────────────────────────────────
@@ -1472,6 +1760,7 @@ func _apply_parts_all(p: Dictionary, S: Dictionary, C: Dictionary, R: Dictionary
 					LO["b1"] = O.bar1
 
 
+
 # ─────────────────────────────────────────────
 # Adjacency: shrink tight note clusters
 # ─────────────────────────────────────────────
@@ -1543,6 +1832,7 @@ func _get_adj_factor(nd) -> float:
 	return 1.0
 
 
+
 # ─────────────────────────────────────────────
 # Chart hook
 # ─────────────────────────────────────────────
@@ -1566,6 +1856,13 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_pf_chain.clear()
 	_pf_wrapper = null
 	_pf_baseline_pos = Vector2.ZERO
+
+	# Mirai lines (runtime)
+	if _mirai_line_root != null and is_instance_valid(_mirai_line_root):
+		_mirai_line_root.queue_free()
+	_mirai_rows_loaded = false
+	_mirai_links.clear()
+	_mirai_line_root = null
 
 	_mark_adjacent_notes(points)
 	return points
