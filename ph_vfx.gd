@@ -19,6 +19,7 @@ const SLIDE_CHAIN_MAX_HEAD_DT_MS := 400  # how far (in ms) a chain piece can loo
 const PF_ENTRY_TAG := "$PLAYFIELD"
 const PF_USE_ABSOLUTE_CHAIN := true
 
+const RUNTIME_GLOW_GAIN := 1.4  # tweak this until it matches MegaInjector
 
 
 var anim_bank := PHVFXAnimBank.new()
@@ -257,6 +258,7 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
 		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
 		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
+		var G: Dictionary = anim_bank._sample_glow_for_key(key, t_ms)  # << NEW
 
 		_apply_drawer_field_transform(d, R, O, false)
 
@@ -269,7 +271,7 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 			"bar2":   O.bar2 - O.target,
 		}
 
-		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
 
 	# Slide-chain pieces in LAYER_SlideChainPieces
 	_update_slide_chain_drawers(t_ms)
@@ -421,6 +423,17 @@ func _set_offset(ci: CanvasItem, ofs: Vector2) -> void:
 	sm.set_shader_parameter("u_offset", ofs)
 	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
 	ci.queue_redraw()
+
+func _set_glow(ci: CanvasItem, g: float) -> void:
+	var sm := _ensure_sm(ci)
+	if sm == null:
+		return
+	# clamp to non-negative so shader math stays sane
+	var gg := max(g, 0.0)
+	sm.set_shader_parameter("u_glow", gg)
+	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
+	ci.queue_redraw()
+
 
 
 # ─────────────────────────────────────────────
@@ -1052,7 +1065,10 @@ func _anim_bank_has_any_rows_for_key(key: String) -> bool:
 		return true
 	if anim_bank.buckets_spot.has(key):
 		return true
+	if anim_bank.buckets_glow.has(key):   # NEW
+		return true
 	return false
+
 
 
 func _get_effective_key_for_drawer(d: Node) -> String:
@@ -1110,6 +1126,8 @@ func _find_nearest_slide_head_key(chain_raw_key: String) -> String:
 	for k in anim_bank.buckets_offset.keys():
 		candidate_dict[k] = true
 	for k in anim_bank.buckets_spot.keys():
+		candidate_dict[k] = true
+	for k in anim_bank.buckets_glow.keys():   # NEW
 		candidate_dict[k] = true
 
 	if candidate_dict.is_empty():
@@ -1438,6 +1456,7 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
 		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
 		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
+		var G: Dictionary = anim_bank._sample_glow_for_key(key, t_ms)  # NEW
 
 		_apply_drawer_field_transform(d, R, O, false)
 
@@ -1450,7 +1469,8 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 			"bar2":   O.bar2 - O.target,
 		}
 
-		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
+
 
 
 func _update_trail_drawers(t_ms: int) -> void:
@@ -1487,9 +1507,9 @@ func _update_trail_drawers(t_ms: int) -> void:
 		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
 		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
 		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
+		var G: Dictionary = anim_bank._sample_glow_for_key(key, t_ms)
 
-		# Move whole drawer (trail) with the target offset / rotation,
-		# like we do for slide chain drawers.
+		# Move whole drawer (trail) with the target offset / rotation
 		_apply_drawer_field_transform(d, R, O, false)
 
 		var O_rel := {
@@ -1501,7 +1521,9 @@ func _update_trail_drawers(t_ms: int) -> void:
 			"bar2":   O.bar2 - O.target,
 		}
 
-		_apply_parts_all(parts, S, C, R, O_rel, adj_factor)
+		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
+
+
 
 
 
@@ -1571,6 +1593,10 @@ func _init_part_state(p: Dictionary) -> void:
 		"b1": Vector2(999999, 999999),
 		"b2": Vector2(999999, 999999),
 	}
+	p["_lastG"] = {
+		"h": -9999.0, "t": -9999.0, "tg": -9999.0,
+		"b1": -9999.0, "b2": -9999.0, "ho": -9999.0,
+	}
 
 
 
@@ -1617,7 +1643,16 @@ func _apply_drawer_field_transform(root: Node, R: Dictionary, O: Dictionary, use
 # Parts application (scale × adj, color, rot, offset)
 # ─────────────────────────────────────────────
 
-func _apply_parts_all(p: Dictionary, S: Dictionary, C: Dictionary, R: Dictionary, O: Dictionary, adj_factor: float) -> void:
+func _apply_parts_all(
+	p: Dictionary,
+	S: Dictionary,
+	C: Dictionary,
+	R: Dictionary,
+	O: Dictionary,
+	G: Dictionary,
+	adj_factor: float
+) -> void:
+
 	if p.is_empty():
 		return
 
@@ -1625,6 +1660,8 @@ func _apply_parts_all(p: Dictionary, S: Dictionary, C: Dictionary, R: Dictionary
 	var LC: Dictionary = p["_lastC"]
 	var LR: Dictionary = p["_lastR"]
 	var LO: Dictionary = p["_lastO"]
+	var LG: Dictionary = p["_lastG"]
+
 
 	var head: CanvasItem = p.get("head", null)
 	var tail: CanvasItem = p.get("tail", null)
@@ -1758,6 +1795,45 @@ func _apply_parts_all(p: Dictionary, S: Dictionary, C: Dictionary, R: Dictionary
 				if LO["b1"] != O.bar1:
 					_set_offset(child3, O.bar1)
 					LO["b1"] = O.bar1
+
+	# GLOW (uses same part layout; scaled by adjacency factor)
+	var head_glow   : float = float(G.get("head",   0.0)) * adj_factor
+	var tail_glow   : float = float(G.get("tail",   0.0)) * adj_factor
+	var target_glow : float = float(G.get("target", 0.0)) * adj_factor
+	var bar1_glow   : float = float(G.get("bar1",   0.0)) * adj_factor
+	var bar2_glow   : float = float(G.get("bar2",   bar1_glow)) * adj_factor
+	var hold_glow   : float = float(G.get("hold",   0.0)) * adj_factor
+
+	if head != null and LG["h"] != head_glow:
+		_set_glow(head, head_glow)
+		LG["h"] = head_glow
+
+	if tail != null and LG["t"] != tail_glow:
+		_set_glow(tail, tail_glow)
+		LG["t"] = tail_glow
+
+	if target_root != null:
+		for child_g in (target_root as Node).get_children():
+			if not (child_g is CanvasItem):
+				continue
+			var cname_g := String(child_g.name).to_lower()
+			if cname_g.findn("timingarm2") != -1:
+				if LG["b2"] != bar2_glow:
+					_set_glow(child_g, bar2_glow)
+					LG["b2"] = bar2_glow
+			elif cname_g.findn("timingarm") != -1 or cname_g.findn("bar") != -1:
+				if LG["b1"] != bar1_glow:
+					_set_glow(child_g, bar1_glow)
+					LG["b1"] = bar1_glow
+			elif cname_g.findn("sprite") != -1 or cname_g.findn("target") != -1:
+				if LG["tg"] != target_glow:
+					_set_glow(child_g, target_glow)
+					LG["tg"] = target_glow
+
+	for h_g in hold_nodes:
+		if h_g is CanvasItem and LG["ho"] != hold_glow:
+			_set_glow(h_g, hold_glow)
+			LG["ho"] = hold_glow
 
 
 
