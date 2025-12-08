@@ -6,6 +6,7 @@ const COLOR_TAG  := "ColorAnim/v1"
 const ROTATE_TAG := "RotateAnim/v1"
 const OFFSET_TAG := "PosOffsetAnim/v1"
 const SPOT_TAG   := "SpotlightAnim/v1"
+const GLOW_TAG   := "GlowAnim/v1"   # <── NEW
 
 # Per-note buckets by TAG: key = "layer@note_type@anim_note_time"
 var buckets_scale: Dictionary = {}
@@ -23,6 +24,10 @@ var times_offset: Dictionary = {}
 var buckets_spot: Dictionary = {}
 var times_spot: Dictionary = {}
 
+# NEW: Glow buckets
+var buckets_glow: Dictionary = {}
+var times_glow: Dictionary = {}
+
 # Merged event index (union of all row times across all tags)
 var _events_times: PackedInt32Array = PackedInt32Array()
 var _events_keys: Array = [] # Array[Array[String]]; keys that have a row at that time (any tag)
@@ -33,6 +38,7 @@ func clear() -> void:
 	buckets_rot.clear();    times_rot.clear()
 	buckets_offset.clear(); times_offset.clear()
 	buckets_spot.clear();   times_spot.clear()
+	buckets_glow.clear();   times_glow.clear()   # <── NEW
 
 	_events_times = PackedInt32Array()
 	_events_keys.clear()
@@ -82,6 +88,9 @@ func load_from_json(json_path: String) -> void:
 			SPOT_TAG:
 				if not buckets_spot.has(key): buckets_spot[key] = []
 				(buckets_spot[key] as Array).append(e)
+			GLOW_TAG:                                   # <── NEW
+				if not buckets_glow.has(key): buckets_glow[key] = []
+				(buckets_glow[key] as Array).append(e)
 			_:
 				pass
 
@@ -91,6 +100,7 @@ func load_from_json(json_path: String) -> void:
 	_func_sort_and_index(buckets_rot,    times_rot)
 	_func_sort_and_index(buckets_offset, times_offset)
 	_func_sort_and_index(buckets_spot,   times_spot)
+	_func_sort_and_index(buckets_glow,   times_glow)   # <── NEW
 
 	# Build merged event times (union of all times across all tags)
 	var time_to_keys: Dictionary = {}
@@ -99,6 +109,7 @@ func load_from_json(json_path: String) -> void:
 	_merge_times_into(time_to_keys, buckets_rot,    times_rot)
 	_merge_times_into(time_to_keys, buckets_offset, times_offset)
 	_merge_times_into(time_to_keys, buckets_spot,   times_spot)
+	_merge_times_into(time_to_keys, buckets_glow,   times_glow)  # <── NEW
 
 	var times: Array = time_to_keys.keys()
 	times.sort()
@@ -216,6 +227,18 @@ func _segment_end_time_for_key_at_time(key: String, row_time: int) -> int:
 				var jsp := isp if tsp_arr[isp] > row_time else (isp + 1)
 				if jsp < tsp_arr.size():
 					nexts.append(tsp_arr[jsp])
+
+	# NEW: glow segments can also keep a key “live”
+	idx = times_glow.get(key, null)
+	if idx != null:
+		var tg_arr := idx as PackedInt32Array
+		var ig := tg_arr.bsearch(row_time)
+		if ig < tg_arr.size():
+			var tg := tg_arr[ig]
+			if tg != row_time or (ig + 1) < tg_arr.size():
+				var jg := ig if tg_arr[ig] > row_time else (ig + 1)
+				if jg < tg_arr.size():
+					nexts.append(tg_arr[jg])
 
 	if nexts.is_empty():
 		return row_time
@@ -484,27 +507,31 @@ func _sample_rot_for_key(key: String, t_ms: int) -> Dictionary:
 		var raw_t := 0.0
 		if t1 > t0:
 			raw_t = clamp((float(t_ms) - t0) / (t1 - t0), 0.0, 1.0)
+
 		var ease_name := String(next_r.get("ease", prev_r.get("ease", "linear")))
 		var tt := _ease_t(ease_name, raw_t)
 
-		var hp := _deg_from_row(prev_r, "rotation_deg_head", out.head)
-		var hn := _deg_from_row(next_r, "rotation_deg_head", hp)
-		var tp := _deg_from_row(prev_r, "rotation_deg_tail", out.tail)
-		var tn := _deg_from_row(next_r, "rotation_deg_tail", tp)
-		var gp := _deg_from_row(prev_r, "rotation_deg_target", out.target)
-		var gn := _deg_from_row(next_r, "rotation_deg_target", gp)
+		# IMPORTANT: treat degrees as literal, unbounded values.
+		var hp := _deg_from_row(prev_r, "rotation_deg_head",    out.head)
+		var hn := _deg_from_row(next_r, "rotation_deg_head",    hp)
+		var tp := _deg_from_row(prev_r, "rotation_deg_tail",    out.tail)
+		var tn := _deg_from_row(next_r, "rotation_deg_tail",    tp)
+		var gp := _deg_from_row(prev_r, "rotation_deg_target",  out.target)
+		var gn := _deg_from_row(next_r, "rotation_deg_target",  gp)
 		var op := _deg_from_row(prev_r, "rotation_deg_holdtext", out.hold)
 		var on := _deg_from_row(next_r, "rotation_deg_holdtext", op)
 
-		out.head = _shortest_arc_lerp(hp, hn, tt)
-		out.tail = _shortest_arc_lerp(tp, tn, tt)
-		out.target = _shortest_arc_lerp(gp, gn, tt)
-		out.hold = _shortest_arc_lerp(op, on, tt)
+		out.head   = _lerp(hp, hn, tt)
+		out.tail   = _lerp(tp, tn, tt)
+		out.target = _lerp(gp, gn, tt)
+		out.hold   = _lerp(op, on, tt)
+
 	elif not prev_r.is_empty():
-		out.head = _deg_from_row(prev_r, "rotation_deg_head", out.head)
-		out.tail = _deg_from_row(prev_r, "rotation_deg_tail", out.tail)
-		out.target = _deg_from_row(prev_r, "rotation_deg_target", out.target)
-		out.hold = _deg_from_row(prev_r, "rotation_deg_holdtext", out.hold)
+		out.head   = _deg_from_row(prev_r, "rotation_deg_head",    out.head)
+		out.tail   = _deg_from_row(prev_r, "rotation_deg_tail",    out.tail)
+		out.target = _deg_from_row(prev_r, "rotation_deg_target",  out.target)
+		out.hold   = _deg_from_row(prev_r, "rotation_deg_holdtext", out.hold)
+
 	return out
 
 
@@ -560,4 +587,45 @@ func _sample_spot_for_key(key: String, t_ms: int) -> Dictionary:
 		out["center"] = _arr_to_vec2(prev_r.get("spot_center", [0.5, 0.5]), out["center"])
 		out["enable"] = bool(prev_r.get("spot_enable", out["enable"]))
 
+	return out
+
+
+# NEW: Glow sampling – mirrors _sample_scales_for_key
+func _sample_glow_for_key(key: String, t_ms: int) -> Dictionary:
+	var out := {"head":0.0,"target":0.0,"bar1":0.0,"bar2":0.0,"tail":0.0,"hold":0.0}
+	var bucket: Array = buckets_glow.get(key, [])
+	if bucket.is_empty():
+		return out
+
+	var pair := _pair_around_time(times_glow, buckets_glow, key, t_ms)
+	var prev_r: Dictionary = pair[0]
+	var next_r: Dictionary = pair[1]
+
+	if not prev_r.is_empty() and not next_r.is_empty():
+		var t0 := float(prev_r.get("time", t_ms))
+		var t1 := float(next_r.get("time", t_ms))
+		var raw_t := 0.0
+		if t1 > t0:
+			raw_t = clamp((float(t_ms) - t0) / (t1 - t0), 0.0, 1.0)
+
+		var ease_name := String(next_r.get("ease", prev_r.get("ease", "linear")))
+		var tt := _ease_t(ease_name, raw_t)
+
+		out.head   = _lerp(float(prev_r.get("glow_head",0.0)),   float(next_r.get("glow_head",0.0)), tt)
+		out.target = _lerp(float(prev_r.get("glow_target",0.0)), float(next_r.get("glow_target",0.0)), tt)
+		out.bar1   = _lerp(float(prev_r.get("glow_bar1",0.0)),   float(next_r.get("glow_bar1",0.0)), tt)
+
+		var pb2 := float(prev_r.get("glow_bar2", float(prev_r.get("glow_bar1",0.0))))
+		var nb2 := float(next_r.get("glow_bar2", float(next_r.get("glow_bar1",0.0))))
+		out.bar2   = _lerp(pb2, nb2, tt)
+
+		out.tail   = _lerp(float(prev_r.get("glow_tail",0.0)),   float(next_r.get("glow_tail",0.0)), tt)
+		out.hold   = _lerp(float(prev_r.get("glow_hold",0.0)),   float(next_r.get("glow_hold",0.0)), tt)
+	elif not prev_r.is_empty():
+		out.head   = float(prev_r.get("glow_head",0.0))
+		out.target = float(prev_r.get("glow_target",0.0))
+		out.bar1   = float(prev_r.get("glow_bar1",0.0))
+		out.bar2   = float(prev_r.get("glow_bar2", out.bar1))
+		out.tail   = float(prev_r.get("glow_tail",0.0))
+		out.hold   = float(prev_r.get("glow_hold",0.0))
 	return out
