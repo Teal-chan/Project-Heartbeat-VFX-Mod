@@ -109,6 +109,7 @@ static func get_vfx_path_for_song(song, difficulty: String) -> String:
 
 static var _song_vfx_cache: Dictionary = {}
 
+
 static func has_any_vfx_for_song(song: HBSong) -> bool:
 	if song == null:
 		return false
@@ -117,20 +118,36 @@ static func has_any_vfx_for_song(song: HBSong) -> bool:
 	if _song_vfx_cache.has(sid):
 		return bool(_song_vfx_cache[sid])
 
-	# Look for any *_vfx.json file under user://editor_songs/<song_id>/
-	var dir_path := "user://editor_songs/%s" % sid
 	var has := false
+
+	# Primary: look next to the song file, no matter where it lives.
+	# This mirrors the logic we used in WorkshopUploadForm.
+	var song_fs_path := ProjectSettings.globalize_path(song.path)
+	var dir_path := song_fs_path
+
+	# If song.path points to a file, fall back to its folder
+	if not DirAccess.dir_exists_absolute(dir_path):
+		dir_path = song_fs_path.get_base_dir()
 
 	if DirAccess.dir_exists_absolute(dir_path):
 		var d := DirAccess.open(dir_path)
 		if d != null:
 			d.list_dir_begin()
-			var fname := d.get_next()
-			while fname != "":
-				if not d.current_is_dir() and fname.to_lower().ends_with("_vfx.json"):
+			while true:
+				var fname := d.get_next()
+				if fname == "":
+					break
+				if d.current_is_dir():
+					continue
+
+				var lower := fname.to_lower()
+				if not lower.ends_with(".json"):
+					continue
+
+				# Be slightly flexible: *_vfx.json or any JSON with "vfx" in the name
+				if lower.ends_with("_vfx.json") or lower.find("vfx") != -1:
 					has = true
 					break
-				fname = d.get_next()
 			d.list_dir_end()
 
 	_song_vfx_cache[sid] = has
@@ -139,7 +156,6 @@ static func has_any_vfx_for_song(song: HBSong) -> bool:
 
 static func clear_vfx_cache() -> void:
 	_song_vfx_cache.clear()
-
 
 
 # ─────────────────────────────────────────────
@@ -171,8 +187,59 @@ func _ensure_context_from_statics() -> void:
 func _detect_vfx_path() -> String:
 	_ensure_context_from_statics()
 
-	# Preferred: chart-specific JSON
+	# If we have song + difficulty context, first try to find a VFX JSON
+	# *next to the chart file/folder* (works for workshop AND editor songs).
 	if _song_ctx != null and _difficulty_ctx != "":
+		var song_res_path: String = _song_ctx.path
+		if song_res_path != "":
+			# Convert to OS path so we can poke around with DirAccess
+			var song_fs_path := ProjectSettings.globalize_path(song_res_path)
+			var dir_path := song_fs_path
+
+			# If song.path is a file, use its parent directory instead.
+			if not DirAccess.dir_exists_absolute(dir_path):
+				dir_path = song_fs_path.get_base_dir()
+
+			if DirAccess.dir_exists_absolute(dir_path):
+				var dir := DirAccess.open(dir_path)
+				if dir != null:
+					var diff_tag := _difficulty_ctx.replace(" ", "_").to_lower()
+					var preferred_os_path := ""
+					var fallback_os_path := ""
+
+					dir.list_dir_begin()
+					while true:
+						var fn := dir.get_next()
+						if fn == "":
+							break
+						if dir.current_is_dir():
+							continue
+
+						var lower := String(fn).to_lower()
+						if not lower.ends_with(".json"):
+							continue
+
+						# Strong preference: "<difficulty>_vfx.json" (e.g. "hard_vfx.json")
+						if lower == "%s_vfx.json" % diff_tag:
+							preferred_os_path = dir_path.path_join(fn)
+							break
+
+						# General fallback: any "*_vfx.json" in this folder.
+						if fallback_os_path == "" and lower.ends_with("_vfx.json"):
+							fallback_os_path = dir_path.path_join(fn)
+					dir.list_dir_end()
+
+					var os_path := preferred_os_path
+					if os_path == "" and fallback_os_path != "":
+						os_path = fallback_os_path
+
+					if os_path != "":
+						# Convert back to a project path ("user://...") for FileAccess.
+						var vfs_path := ProjectSettings.localize_path(os_path)
+						print("%s: using song-local VFX JSON at %s" % [LOG_NAME, vfs_path])
+						return vfs_path
+
+		# Legacy editor path (user://editor_songs/<id>/<diff>_vfx.json)
 		var candidate := get_vfx_path_for_song(_song_ctx, _difficulty_ctx)
 		print("%s: candidate VFX path from song/diff: %s" % [LOG_NAME, candidate])
 		if FileAccess.file_exists(candidate):
@@ -181,13 +248,13 @@ func _detect_vfx_path() -> String:
 		else:
 			print("%s: chart-specific JSON missing at %s" % [LOG_NAME, candidate])
 
-	# Fallback: global slot
+	# Global fallback: old single-slot JSON, if someone still uses it.
 	var fallback_path := "user://note_vfx.json"
 	if FileAccess.file_exists(fallback_path):
 		print("%s: falling back to global VFX JSON at %s" % [LOG_NAME, fallback_path])
 		return fallback_path
 
-	print("%s: no VFX JSON found (neither chart-specific nor fallback)." % LOG_NAME)
+	print("%s: no VFX JSON found (local, chart-specific, or fallback)." % LOG_NAME)
 	return ""
 
 
