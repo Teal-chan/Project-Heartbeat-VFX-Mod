@@ -1,12 +1,60 @@
 extends RefCounted
 
-# Same tags as before
+# ---------------- TAGS ----------------
+
 const SCALE_TAG  := "ScaleAbsAnim/v1"
 const COLOR_TAG  := "ColorAnim/v1"
 const ROTATE_TAG := "RotateAnim/v1"
 const OFFSET_TAG := "PosOffsetAnim/v1"
 const SPOT_TAG   := "SpotlightAnim/v1"
-const GLOW_TAG   := "GlowAnim/v1"   # <── NEW
+const GLOW_TAG   := "GlowAnim/v1"
+
+# Default / identity values for when a key has no rows for a tag.
+const DEFAULT_SCALES := {
+	"head": 1.0,
+	"target": 1.0,
+	"bar1": 1.0,
+	"bar2": 1.0,
+	"tail": 1.0,
+	"hold": 1.0,
+}
+
+const DEFAULT_COLORS := {
+	"icon": Color(1, 1, 1, 1),
+	"target": Color(1, 1, 1, 1),
+	"bar1": Color(1, 1, 1, 1),
+	"bar2": Color(1, 1, 1, 1),
+	"head": Color(1, 1, 1, 1),
+	"tail": Color(1, 1, 1, 1),
+	"hold": Color(1, 1, 1, 1),
+}
+
+const DEFAULT_OFFSETS := {
+	"head":   Vector2.ZERO,
+	"tail":   Vector2.ZERO,
+	"target": Vector2.ZERO,
+	"hold":   Vector2.ZERO,
+	"bar1":   Vector2.ZERO,
+	"bar2":   Vector2.ZERO,
+}
+
+const DEFAULT_ROTS := {
+	"head": 0.0,
+	"tail": 0.0,
+	"target": 0.0,
+	"hold": 0.0,
+}
+
+const DEFAULT_GLOWS := {
+	"head": 0.0,
+	"target": 0.0,
+	"bar1": 0.0,
+	"bar2": 0.0,
+	"tail": 0.0,
+	"hold": 0.0,
+}
+
+# ---------------- BUCKETS ----------------
 
 # Per-note buckets by TAG: key = "layer@note_type@anim_note_time"
 var buckets_scale: Dictionary = {}
@@ -24,7 +72,6 @@ var times_offset: Dictionary = {}
 var buckets_spot: Dictionary = {}
 var times_spot: Dictionary = {}
 
-# NEW: Glow buckets
 var buckets_glow: Dictionary = {}
 var times_glow: Dictionary = {}
 
@@ -32,13 +79,26 @@ var times_glow: Dictionary = {}
 var _events_times: PackedInt32Array = PackedInt32Array()
 var _events_keys: Array = [] # Array[Array[String]]; keys that have a row at that time (any tag)
 
+# ---------------- CORE API ----------------
+
 func clear() -> void:
-	buckets_scale.clear();  times_scale.clear()
-	buckets_color.clear();  times_color.clear()
-	buckets_rot.clear();    times_rot.clear()
-	buckets_offset.clear(); times_offset.clear()
-	buckets_spot.clear();   times_spot.clear()
-	buckets_glow.clear();   times_glow.clear()   # <── NEW
+	buckets_scale.clear()
+	times_scale.clear()
+
+	buckets_color.clear()
+	times_color.clear()
+
+	buckets_rot.clear()
+	times_rot.clear()
+
+	buckets_offset.clear()
+	times_offset.clear()
+
+	buckets_spot.clear()
+	times_spot.clear()
+
+	buckets_glow.clear()
+	times_glow.clear()
 
 	_events_times = PackedInt32Array()
 	_events_keys.clear()
@@ -64,9 +124,17 @@ func load_from_json(json_path: String) -> void:
 		if typeof(v) != TYPE_DICTIONARY:
 			continue
 		var e: Dictionary = v
+
+		# Normalize ease name once so sampling can skip to_lower every frame.
+		if not e.has("ease"):
+			e["ease"] = "linear"
+		else:
+			e["ease"] = String(e["ease"]).to_lower()
+
 		var tag := String(e.get("anim", ""))
 		if not (e.has("layer") and e.has("time") and e.has("note_type") and e.has("anim_note_time")):
 			continue
+
 		var layer := String(e["layer"])
 		var nt := int(e["note_type"])
 		var head_t := int(e["anim_note_time"])
@@ -74,22 +142,28 @@ func load_from_json(json_path: String) -> void:
 
 		match tag:
 			SCALE_TAG:
-				if not buckets_scale.has(key): buckets_scale[key] = []
+				if not buckets_scale.has(key):
+					buckets_scale[key] = []
 				(buckets_scale[key] as Array).append(e)
 			COLOR_TAG:
-				if not buckets_color.has(key): buckets_color[key] = []
+				if not buckets_color.has(key):
+					buckets_color[key] = []
 				(buckets_color[key] as Array).append(e)
 			ROTATE_TAG:
-				if not buckets_rot.has(key): buckets_rot[key] = []
+				if not buckets_rot.has(key):
+					buckets_rot[key] = []
 				(buckets_rot[key] as Array).append(e)
 			OFFSET_TAG:
-				if not buckets_offset.has(key): buckets_offset[key] = []
+				if not buckets_offset.has(key):
+					buckets_offset[key] = []
 				(buckets_offset[key] as Array).append(e)
 			SPOT_TAG:
-				if not buckets_spot.has(key): buckets_spot[key] = []
+				if not buckets_spot.has(key):
+					buckets_spot[key] = []
 				(buckets_spot[key] as Array).append(e)
-			GLOW_TAG:                                   # <── NEW
-				if not buckets_glow.has(key): buckets_glow[key] = []
+			GLOW_TAG:
+				if not buckets_glow.has(key):
+					buckets_glow[key] = []
 				(buckets_glow[key] as Array).append(e)
 			_:
 				pass
@@ -100,7 +174,7 @@ func load_from_json(json_path: String) -> void:
 	_func_sort_and_index(buckets_rot,    times_rot)
 	_func_sort_and_index(buckets_offset, times_offset)
 	_func_sort_and_index(buckets_spot,   times_spot)
-	_func_sort_and_index(buckets_glow,   times_glow)   # <── NEW
+	_func_sort_and_index(buckets_glow,   times_glow)
 
 	# Build merged event times (union of all times across all tags)
 	var time_to_keys: Dictionary = {}
@@ -109,7 +183,7 @@ func load_from_json(json_path: String) -> void:
 	_merge_times_into(time_to_keys, buckets_rot,    times_rot)
 	_merge_times_into(time_to_keys, buckets_offset, times_offset)
 	_merge_times_into(time_to_keys, buckets_spot,   times_spot)
-	_merge_times_into(time_to_keys, buckets_glow,   times_glow)  # <── NEW
+	_merge_times_into(time_to_keys, buckets_glow,   times_glow)
 
 	var times: Array = time_to_keys.keys()
 	times.sort()
@@ -118,6 +192,7 @@ func load_from_json(json_path: String) -> void:
 	for i in _events_times.size():
 		_events_keys[i] = time_to_keys[_events_times[i]]
 
+# ---------------- INTERNAL INDEX HELPERS ----------------
 
 func _func_sort_and_index(buckets: Dictionary, times_map: Dictionary) -> void:
 	for k in buckets.keys():
@@ -126,6 +201,7 @@ func _func_sort_and_index(buckets: Dictionary, times_map: Dictionary) -> void:
 			return int(a.get("time", 0)) < int(b.get("time", 0))
 		)
 		buckets[k] = arr
+
 		var t := PackedInt32Array()
 		t.resize(arr.size())
 		for i in range(arr.size()):
@@ -143,12 +219,11 @@ func _merge_times_into(acc: Dictionary, buckets: Dictionary, times_map: Dictiona
 			(acc[tval] as Array).append(k)
 
 
-# ------ sampling helpers shared by tags ------
-
 func _pair_around_time(times_idx: Dictionary, buckets: Dictionary, key: String, t_ms: int) -> Array:
 	var arr: Array = buckets.get(key, [])
 	if arr.is_empty():
 		return [{}, {}]
+
 	var times: PackedInt32Array = times_idx.get(key, PackedInt32Array())
 	var lo := 0
 	var hi := times.size() - 1
@@ -161,6 +236,7 @@ func _pair_around_time(times_idx: Dictionary, buckets: Dictionary, key: String, 
 			lo = mid + 1
 		else:
 			hi = mid - 1
+
 	var prev := {}
 	var next := {}
 	if best >= 0:
@@ -228,7 +304,7 @@ func _segment_end_time_for_key_at_time(key: String, row_time: int) -> int:
 				if jsp < tsp_arr.size():
 					nexts.append(tsp_arr[jsp])
 
-	# NEW: glow segments can also keep a key “live”
+	# Glow segments can also keep a key “live”
 	idx = times_glow.get(key, null)
 	if idx != null:
 		var tg_arr := idx as PackedInt32Array
@@ -245,6 +321,7 @@ func _segment_end_time_for_key_at_time(key: String, row_time: int) -> int:
 	nexts.sort()
 	return nexts[0]
 
+# ---------------- MATH HELPERS ----------------
 
 func _lerp(a: float, b: float, t: float) -> float:
 	return a + (b - a) * t
@@ -288,7 +365,7 @@ func _shortest_arc_lerp(a0: float, a1: float, t: float) -> float:
 
 func _ease_t(name: String, x: float) -> float:
 	var tt := clampf(x, 0.0, 1.0)
-	var nm := name.to_lower()
+	var nm := name  # already lowercased in load_from_json
 
 	if nm == "hold":
 		return 0.0 if tt < 1.0 else 1.0
@@ -297,26 +374,36 @@ func _ease_t(name: String, x: float) -> float:
 
 	match nm:
 		"in_out_quad":
-			if tt < 0.5: return 2.0 * tt * tt
+			if tt < 0.5:
+				return 2.0 * tt * tt
 			return 1.0 - pow(-2.0 * tt + 2.0, 2.0) / 2.0
 		"in_out_cubic":
-			if tt < 0.5: return 4.0 * tt * tt * tt
+			if tt < 0.5:
+				return 4.0 * tt * tt * tt
 			return 1.0 - pow(-2.0 * tt + 2.0, 3.0) / 2.0
 		"out_elastic":
-			if tt == 0.0 or tt == 1.0: return tt
+			if tt == 0.0 or tt == 1.0:
+				return tt
 			var c := (2.0 * PI) / 3.0
 			return pow(2.0, -10.0 * tt) * sin((tt * 10.0 - 0.75) * c) + 1.0
 		_:
 			return tt
 
-
-# ------ per-tag sampling APIs used by the injector ------
+# ---------------- SAMPLERS ----------------
 
 func _sample_scales_for_key(key: String, t_ms: int) -> Dictionary:
-	var out := {"head":1.0,"target":1.0,"bar1":1.0,"bar2":1.0,"tail":1.0,"hold":1.0}
 	var bucket: Array = buckets_scale.get(key, [])
 	if bucket.is_empty():
-		return out
+		return DEFAULT_SCALES
+
+	var out := {
+		"head": 1.0,
+		"target": 1.0,
+		"bar1": 1.0,
+		"bar2": 1.0,
+		"tail": 1.0,
+		"hold": 1.0,
+	}
 
 	var pair := _pair_around_time(times_scale, buckets_scale, key, t_ms)
 	var prev_r: Dictionary = pair[0]
@@ -332,39 +419,40 @@ func _sample_scales_for_key(key: String, t_ms: int) -> Dictionary:
 		var ease_name := String(next_r.get("ease", prev_r.get("ease", "linear")))
 		var tt := _ease_t(ease_name, raw_t)
 
-		out.head   = _lerp(float(prev_r.get("scale_head",1.0)),   float(next_r.get("scale_head",1.0)), tt)
-		out.target = _lerp(float(prev_r.get("scale_target",1.0)), float(next_r.get("scale_target",1.0)), tt)
-		out.bar1   = _lerp(float(prev_r.get("scale_bar1",1.0)),   float(next_r.get("scale_bar1",1.0)), tt)
+		out.head   = _lerp(float(prev_r.get("scale_head", 1.0)),   float(next_r.get("scale_head", 1.0)), tt)
+		out.target = _lerp(float(prev_r.get("scale_target", 1.0)), float(next_r.get("scale_target", 1.0)), tt)
+		out.bar1   = _lerp(float(prev_r.get("scale_bar1", 1.0)),   float(next_r.get("scale_bar1", 1.0)), tt)
 
-		var pb2 := float(prev_r.get("scale_bar2", float(prev_r.get("scale_bar1",1.0))))
-		var nb2 := float(next_r.get("scale_bar2", float(next_r.get("scale_bar1",1.0))))
+		var pb2 := float(prev_r.get("scale_bar2", float(prev_r.get("scale_bar1", 1.0))))
+		var nb2 := float(next_r.get("scale_bar2", float(next_r.get("scale_bar1", 1.0))))
 		out.bar2   = _lerp(pb2, nb2, tt)
 
-		out.tail   = _lerp(float(prev_r.get("scale_tail",1.0)),   float(next_r.get("scale_tail",1.0)), tt)
-		out.hold   = _lerp(float(prev_r.get("scale_hold",1.0)),   float(next_r.get("scale_hold",1.0)), tt)
+		out.tail   = _lerp(float(prev_r.get("scale_tail", 1.0)),   float(next_r.get("scale_tail", 1.0)), tt)
+		out.hold   = _lerp(float(prev_r.get("scale_hold", 1.0)),   float(next_r.get("scale_hold", 1.0)), tt)
 	elif not prev_r.is_empty():
-		out.head   = float(prev_r.get("scale_head",1.0))
-		out.target = float(prev_r.get("scale_target",1.0))
-		out.bar1   = float(prev_r.get("scale_bar1",1.0))
+		out.head   = float(prev_r.get("scale_head", 1.0))
+		out.target = float(prev_r.get("scale_target", 1.0))
+		out.bar1   = float(prev_r.get("scale_bar1", 1.0))
 		out.bar2   = float(prev_r.get("scale_bar2", out.bar1))
-		out.tail   = float(prev_r.get("scale_tail",1.0))
-		out.hold   = float(prev_r.get("scale_hold",1.0))
+		out.tail   = float(prev_r.get("scale_tail", 1.0))
+		out.hold   = float(prev_r.get("scale_hold", 1.0))
 	return out
 
 
 func _sample_colors_for_key(key: String, t_ms: int) -> Dictionary:
-	var out := {
-		"icon": Color(1,1,1,1),
-		"target": Color(1,1,1,1),
-		"bar1": Color(1,1,1,1),
-		"bar2": Color(1,1,1,1),
-		"head": Color(1,1,1,1),
-		"tail": Color(1,1,1,1),
-		"hold": Color(1,1,1,1)
-	}
 	var bucket: Array = buckets_color.get(key, [])
 	if bucket.is_empty():
-		return out
+		return DEFAULT_COLORS
+
+	var out := {
+		"icon": Color(1, 1, 1, 1),
+		"target": Color(1, 1, 1, 1),
+		"bar1": Color(1, 1, 1, 1),
+		"bar2": Color(1, 1, 1, 1),
+		"head": Color(1, 1, 1, 1),
+		"tail": Color(1, 1, 1, 1),
+		"hold": Color(1, 1, 1, 1),
+	}
 
 	var pair := _pair_around_time(times_color, buckets_color, key, t_ms)
 	var prev_r: Dictionary = pair[0]
@@ -380,20 +468,20 @@ func _sample_colors_for_key(key: String, t_ms: int) -> Dictionary:
 		var ease_name := String(next_r.get("ease", prev_r.get("ease", "linear")))
 		var tt := _ease_t(ease_name, raw_t)
 
-		var p_icon := _arr_to_color(prev_r.get("color_icon", [1,1,1,1]), Color(1,1,1,1))
-		var n_icon := _arr_to_color(next_r.get("color_icon", [1,1,1,1]), Color(1,1,1,1))
-		var p_tgt  := _arr_to_color(prev_r.get("color_target", [1,1,1,1]), Color(1,1,1,1))
-		var n_tgt  := _arr_to_color(next_r.get("color_target", [1,1,1,1]), Color(1,1,1,1))
-		var p_b1   := _arr_to_color(prev_r.get("color_bar1", [1,1,1,1]), Color(1,1,1,1))
-		var n_b1   := _arr_to_color(next_r.get("color_bar1", [1,1,1,1]), Color(1,1,1,1))
-		var p_b2   := _arr_to_color(prev_r.get("color_bar2", prev_r.get("color_bar1", [1,1,1,1])), Color(1,1,1,1))
-		var n_b2   := _arr_to_color(next_r.get("color_bar2", next_r.get("color_bar1", [1,1,1,1])), Color(1,1,1,1))
-		var p_head := _arr_to_color(prev_r.get("color_icon_head", prev_r.get("color_icon", [1,1,1,1])), Color(1,1,1,1))
-		var n_head := _arr_to_color(next_r.get("color_icon_head", next_r.get("color_icon", [1,1,1,1])), Color(1,1,1,1))
-		var p_tail := _arr_to_color(prev_r.get("color_icon_tail", prev_r.get("color_icon", [1,1,1,1])), Color(1,1,1,1))
-		var n_tail := _arr_to_color(next_r.get("color_icon_tail", next_r.get("color_icon", [1,1,1,1])), Color(1,1,1,1))
-		var p_hold := _arr_to_color(prev_r.get("color_hold_text", [1,1,1,1]), Color(1,1,1,1))
-		var n_hold := _arr_to_color(next_r.get("color_hold_text", [1,1,1,1]), Color(1,1,1,1))
+		var p_icon := _arr_to_color(prev_r.get("color_icon", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var n_icon := _arr_to_color(next_r.get("color_icon", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var p_tgt  := _arr_to_color(prev_r.get("color_target", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var n_tgt  := _arr_to_color(next_r.get("color_target", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var p_b1   := _arr_to_color(prev_r.get("color_bar1", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var n_b1   := _arr_to_color(next_r.get("color_bar1", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var p_b2   := _arr_to_color(prev_r.get("color_bar2", prev_r.get("color_bar1", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		var n_b2   := _arr_to_color(next_r.get("color_bar2", next_r.get("color_bar1", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		var p_head := _arr_to_color(prev_r.get("color_icon_head", prev_r.get("color_icon", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		var n_head := _arr_to_color(next_r.get("color_icon_head", next_r.get("color_icon", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		var p_tail := _arr_to_color(prev_r.get("color_icon_tail", prev_r.get("color_icon", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		var n_tail := _arr_to_color(next_r.get("color_icon_tail", next_r.get("color_icon", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		var p_hold := _arr_to_color(prev_r.get("color_hold_text", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		var n_hold := _arr_to_color(next_r.get("color_hold_text", [1, 1, 1, 1]), Color(1, 1, 1, 1))
 
 		out.icon   = _lerp_color(p_icon, n_icon, tt)
 		out.target = _lerp_color(p_tgt,  n_tgt,  tt)
@@ -403,17 +491,21 @@ func _sample_colors_for_key(key: String, t_ms: int) -> Dictionary:
 		out.tail   = _lerp_color(p_tail, n_tail, tt)
 		out.hold   = _lerp_color(p_hold, n_hold, tt)
 	elif not prev_r.is_empty():
-		out.icon   = _arr_to_color(prev_r.get("color_icon", [1,1,1,1]), Color(1,1,1,1))
-		out.target = _arr_to_color(prev_r.get("color_target", [1,1,1,1]), Color(1,1,1,1))
-		out.bar1   = _arr_to_color(prev_r.get("color_bar1", [1,1,1,1]), Color(1,1,1,1))
-		out.bar2   = _arr_to_color(prev_r.get("color_bar2", prev_r.get("color_bar1", [1,1,1,1])), Color(1,1,1,1))
-		out.head   = _arr_to_color(prev_r.get("color_icon_head", prev_r.get("color_icon", [1,1,1,1])), Color(1,1,1,1))
-		out.tail   = _arr_to_color(prev_r.get("color_icon_tail", prev_r.get("color_icon", [1,1,1,1])), Color(1,1,1,1))
-		out.hold   = _arr_to_color(prev_r.get("color_hold_text", [1,1,1,1]), Color(1,1,1,1))
+		out.icon   = _arr_to_color(prev_r.get("color_icon", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		out.target = _arr_to_color(prev_r.get("color_target", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		out.bar1   = _arr_to_color(prev_r.get("color_bar1", [1, 1, 1, 1]), Color(1, 1, 1, 1))
+		out.bar2   = _arr_to_color(prev_r.get("color_bar2", prev_r.get("color_bar1", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		out.head   = _arr_to_color(prev_r.get("color_icon_head", prev_r.get("color_icon", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		out.tail   = _arr_to_color(prev_r.get("color_icon_tail", prev_r.get("color_icon", [1, 1, 1, 1])), Color(1, 1, 1, 1))
+		out.hold   = _arr_to_color(prev_r.get("color_hold_text", [1, 1, 1, 1]), Color(1, 1, 1, 1))
 	return out
 
 
 func _sample_offset_for_key(key: String, t_ms: int) -> Dictionary:
+	var bucket: Array = buckets_offset.get(key, [])
+	if bucket.is_empty():
+		return DEFAULT_OFFSETS
+
 	var out := {
 		"head":   Vector2.ZERO,
 		"tail":   Vector2.ZERO,
@@ -422,10 +514,6 @@ func _sample_offset_for_key(key: String, t_ms: int) -> Dictionary:
 		"bar1":   Vector2.ZERO,
 		"bar2":   Vector2.ZERO,
 	}
-
-	var bucket: Array = buckets_offset.get(key, [])
-	if bucket.is_empty():
-		return out
 
 	var pair := _pair_around_time(times_offset, buckets_offset, key, t_ms)
 	var prev_r: Dictionary = pair[0]
@@ -470,7 +558,6 @@ func _sample_offset_for_key(key: String, t_ms: int) -> Dictionary:
 		out.hold   = pho.lerp(nho, tt)
 		out.bar1   = pb1.lerp(nb1, tt)
 		out.bar2   = pb2.lerp(nb2, tt)
-
 	elif not prev_r.is_empty():
 		out.head   = _arr_to_vec2(prev_r.get("offset_head", [0, 0]), Vector2.ZERO)
 		out.tail   = _arr_to_vec2(prev_r.get("offset_tail", prev_r.get("offset_head", [0, 0])), out.head)
@@ -492,10 +579,11 @@ func _deg_from_row(e: Dictionary, field: String, fallback: float) -> float:
 
 
 func _sample_rot_for_key(key: String, t_ms: int) -> Dictionary:
-	var out := {"head": 0.0, "tail": 0.0, "target": 0.0, "hold": 0.0}
 	var bucket: Array = buckets_rot.get(key, [])
 	if bucket.is_empty():
-		return out
+		return DEFAULT_ROTS
+
+	var out := {"head": 0.0, "tail": 0.0, "target": 0.0, "hold": 0.0}
 
 	var pair := _pair_around_time(times_rot, buckets_rot, key, t_ms)
 	var prev_r: Dictionary = pair[0]
@@ -511,7 +599,6 @@ func _sample_rot_for_key(key: String, t_ms: int) -> Dictionary:
 		var ease_name := String(next_r.get("ease", prev_r.get("ease", "linear")))
 		var tt := _ease_t(ease_name, raw_t)
 
-		# IMPORTANT: treat degrees as literal, unbounded values.
 		var hp := _deg_from_row(prev_r, "rotation_deg_head",    out.head)
 		var hn := _deg_from_row(next_r, "rotation_deg_head",    hp)
 		var tp := _deg_from_row(prev_r, "rotation_deg_tail",    out.tail)
@@ -525,7 +612,6 @@ func _sample_rot_for_key(key: String, t_ms: int) -> Dictionary:
 		out.tail   = _lerp(tp, tn, tt)
 		out.target = _lerp(gp, gn, tt)
 		out.hold   = _lerp(op, on, tt)
-
 	elif not prev_r.is_empty():
 		out.head   = _deg_from_row(prev_r, "rotation_deg_head",    out.head)
 		out.tail   = _deg_from_row(prev_r, "rotation_deg_tail",    out.tail)
@@ -541,7 +627,7 @@ func _sample_spot_for_key(key: String, t_ms: int) -> Dictionary:
 		"center": Vector2(0.5, 0.5),
 		"radius": 0.30,
 		"soft":   0.20,
-		"dim":    0.15
+		"dim":    0.15,
 	}
 
 	var bucket: Array = buckets_spot.get(key, [])
@@ -590,12 +676,19 @@ func _sample_spot_for_key(key: String, t_ms: int) -> Dictionary:
 	return out
 
 
-# NEW: Glow sampling – mirrors _sample_scales_for_key
 func _sample_glow_for_key(key: String, t_ms: int) -> Dictionary:
-	var out := {"head":0.0,"target":0.0,"bar1":0.0,"bar2":0.0,"tail":0.0,"hold":0.0}
 	var bucket: Array = buckets_glow.get(key, [])
 	if bucket.is_empty():
-		return out
+		return DEFAULT_GLOWS
+
+	var out := {
+		"head": 0.0,
+		"target": 0.0,
+		"bar1": 0.0,
+		"bar2": 0.0,
+		"tail": 0.0,
+		"hold": 0.0,
+	}
 
 	var pair := _pair_around_time(times_glow, buckets_glow, key, t_ms)
 	var prev_r: Dictionary = pair[0]
@@ -611,21 +704,21 @@ func _sample_glow_for_key(key: String, t_ms: int) -> Dictionary:
 		var ease_name := String(next_r.get("ease", prev_r.get("ease", "linear")))
 		var tt := _ease_t(ease_name, raw_t)
 
-		out.head   = _lerp(float(prev_r.get("glow_head",0.0)),   float(next_r.get("glow_head",0.0)), tt)
-		out.target = _lerp(float(prev_r.get("glow_target",0.0)), float(next_r.get("glow_target",0.0)), tt)
-		out.bar1   = _lerp(float(prev_r.get("glow_bar1",0.0)),   float(next_r.get("glow_bar1",0.0)), tt)
+		out.head   = _lerp(float(prev_r.get("glow_head", 0.0)),   float(next_r.get("glow_head", 0.0)), tt)
+		out.target = _lerp(float(prev_r.get("glow_target", 0.0)), float(next_r.get("glow_target", 0.0)), tt)
+		out.bar1   = _lerp(float(prev_r.get("glow_bar1", 0.0)),   float(next_r.get("glow_bar1", 0.0)), tt)
 
-		var pb2 := float(prev_r.get("glow_bar2", float(prev_r.get("glow_bar1",0.0))))
-		var nb2 := float(next_r.get("glow_bar2", float(next_r.get("glow_bar1",0.0))))
+		var pb2 := float(prev_r.get("glow_bar2", float(prev_r.get("glow_bar1", 0.0))))
+		var nb2 := float(next_r.get("glow_bar2", float(next_r.get("glow_bar1", 0.0))))
 		out.bar2   = _lerp(pb2, nb2, tt)
 
-		out.tail   = _lerp(float(prev_r.get("glow_tail",0.0)),   float(next_r.get("glow_tail",0.0)), tt)
-		out.hold   = _lerp(float(prev_r.get("glow_hold",0.0)),   float(next_r.get("glow_hold",0.0)), tt)
+		out.tail   = _lerp(float(prev_r.get("glow_tail", 0.0)),   float(next_r.get("glow_tail", 0.0)), tt)
+		out.hold   = _lerp(float(prev_r.get("glow_hold", 0.0)),   float(next_r.get("glow_hold", 0.0)), tt)
 	elif not prev_r.is_empty():
-		out.head   = float(prev_r.get("glow_head",0.0))
-		out.target = float(prev_r.get("glow_target",0.0))
-		out.bar1   = float(prev_r.get("glow_bar1",0.0))
+		out.head   = float(prev_r.get("glow_head", 0.0))
+		out.target = float(prev_r.get("glow_target", 0.0))
+		out.bar1   = float(prev_r.get("glow_bar1", 0.0))
 		out.bar2   = float(prev_r.get("glow_bar2", out.bar1))
-		out.tail   = float(prev_r.get("glow_tail",0.0))
-		out.hold   = float(prev_r.get("glow_hold",0.0))
+		out.tail   = float(prev_r.get("glow_tail", 0.0))
+		out.hold   = float(prev_r.get("glow_hold", 0.0))
 	return out
