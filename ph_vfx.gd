@@ -59,6 +59,10 @@ var _spot_shader: Shader = null
 # Drawers that should have a spotlight following them
 var _spot_drawers: Array = []
 
+# Per-frame sampling cache (key -> {S,C,R,O,G} at a given time)
+var _frame_sample_time_ms: int = -1
+var _frame_sample_cache: Dictionary = {}  # key -> { "S":..., "C":..., "R":..., "O":..., "G":... }
+
 # Mirai link lines (runtime)
 const MIRAI_LINE_NODE_NAME := "PH_MiraiLinkLines_RUNTIME"
 
@@ -204,8 +208,10 @@ func _detect_vfx_path() -> String:
 				var dir := DirAccess.open(dir_path)
 				if dir != null:
 					var diff_tag := _difficulty_ctx.replace(" ", "_").to_lower()
-					var preferred_os_path := ""
-					var fallback_os_path := ""
+
+					var preferred_os_path := ""   # "<difficulty>_vfx.json"
+					var fallback_os_path := ""    # any "*_vfx.json"
+					var loose_os_path := ""       # any JSON with "vfx" in the name
 
 					dir.list_dir_begin()
 					while true:
@@ -224,14 +230,21 @@ func _detect_vfx_path() -> String:
 							preferred_os_path = dir_path.path_join(fn)
 							break
 
-						# General fallback: any "*_vfx.json" in this folder.
+						# Next: any "*_vfx.json" in this folder.
 						if fallback_os_path == "" and lower.ends_with("_vfx.json"):
 							fallback_os_path = dir_path.path_join(fn)
+							continue
+
+						# Final song-local fallback: any JSON with "vfx" in the name.
+						if loose_os_path == "" and lower.find("vfx") != -1:
+							loose_os_path = dir_path.path_join(fn)
 					dir.list_dir_end()
 
 					var os_path := preferred_os_path
 					if os_path == "" and fallback_os_path != "":
 						os_path = fallback_os_path
+					if os_path == "" and loose_os_path != "":
+						os_path = loose_os_path
 
 					if os_path != "":
 						# Convert back to a project path ("user://...") for FileAccess.
@@ -319,13 +332,16 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 			_init_part_state(parts)
 			_drawer_parts[d] = parts
 
-		var S: Dictionary = anim_bank._sample_scales_for_key(key, t_ms)
-		if S.is_empty():
+		var samples := _sample_all_for_key_cached(key, t_ms)
+		if samples.is_empty():
 			continue
-		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
-		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
-		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
-		var G: Dictionary = anim_bank._sample_glow_for_key(key, t_ms)  # << NEW
+
+		var S: Dictionary = samples["S"]
+		var C: Dictionary = samples["C"]
+		var R: Dictionary = samples["R"]
+		var O: Dictionary = samples["O"]
+		var G: Dictionary = samples["G"]
+
 
 		_apply_drawer_field_transform(d, R, O, false)
 
@@ -435,34 +451,56 @@ func _ensure_sm(ci: CanvasItem) -> ShaderMaterial:
 
 
 func _pivot_for(ci: CanvasItem) -> Vector2:
+	if ci == null or not is_instance_valid(ci):
+		return Vector2.ZERO
+
+	# Cache pivot so we don't recompute every frame
+	if ci.has_meta("_vfx_pivot"):
+		var cached := ci.get_meta("_vfx_pivot")
+		if cached is Vector2:
+			return cached
+
+	var pivot := Vector2.ZERO
+
 	if ci is Sprite2D:
 		var s := ci as Sprite2D
 		if s.centered:
-			return Vector2.ZERO
-		if s.region_enabled:
-			return s.region_rect.size * 0.5 - s.offset
-		var sz := Vector2.ZERO
-		if s.texture != null:
-			sz = s.texture.get_size()
-		return sz * 0.5 - s.offset
-
-	if ci is Control:
-		return (ci as Control).size * 0.5
-
-	if ci.has_method("get_item_rect"):
+			pivot = Vector2.ZERO
+		elif s.region_enabled:
+			pivot = s.region_rect.size * 0.5 - s.offset
+		else:
+			var sz := Vector2.ZERO
+			if s.texture != null:
+				sz = s.texture.get_size()
+			pivot = sz * 0.5 - s.offset
+	elif ci is Control:
+		pivot = (ci as Control).size * 0.5
+	elif ci.has_method("get_item_rect"):
 		var r: Rect2 = ci.call("get_item_rect")
-		return r.position + r.size * 0.5
+		pivot = r.position + r.size * 0.5
 
-	return Vector2.ZERO
+	ci.set_meta("_vfx_pivot", pivot)
+	return pivot
 
 
+
+# Store scale/rotation/offset on the node; we commit all three at once via _commit_transform.
 func _set_scale(ci: CanvasItem, s: float) -> void:
-	var sm := _ensure_sm(ci)
-	if sm == null:
+	if ci == null or not is_instance_valid(ci):
 		return
-	sm.set_shader_parameter("u_scale", s)
-	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
-	ci.queue_redraw()
+	ci.set_meta("_vfx_scale", s)
+
+
+func _set_rotation(ci: CanvasItem, deg: float) -> void:
+	if ci == null or not is_instance_valid(ci):
+		return
+	ci.set_meta("_vfx_rot_deg", deg)
+
+
+func _set_offset(ci: CanvasItem, ofs: Vector2) -> void:
+	if ci == null or not is_instance_valid(ci):
+		return
+	ci.set_meta("_vfx_offset", ofs)
 
 
 func _set_color(ci: CanvasItem, col: Color) -> void:
@@ -470,35 +508,63 @@ func _set_color(ci: CanvasItem, col: Color) -> void:
 	if sm == null:
 		return
 	sm.set_shader_parameter("override_color", col)
-	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
 	ci.queue_redraw()
 
-
-func _set_rotation(ci: CanvasItem, deg: float) -> void:
-	var sm := _ensure_sm(ci)
-	if sm == null:
-		return
-	sm.set_shader_parameter("u_rotation", deg_to_rad(fposmod(deg, 360.0)))
-	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
-	ci.queue_redraw()
-
-
-func _set_offset(ci: CanvasItem, ofs: Vector2) -> void:
-	var sm := _ensure_sm(ci)
-	if sm == null:
-		return
-	sm.set_shader_parameter("u_offset", ofs)
-	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
-	ci.queue_redraw()
 
 func _set_glow(ci: CanvasItem, g: float) -> void:
 	var sm := _ensure_sm(ci)
 	if sm == null:
 		return
-	# clamp to non-negative so shader math stays sane
-	var gg := max(g, 0.0)
+	var gg := max(g * RUNTIME_GLOW_GAIN, 0.0)
 	sm.set_shader_parameter("u_glow", gg)
-	sm.set_shader_parameter("u_pivot", _pivot_for(ci))
+	ci.queue_redraw()
+
+
+# Compute and apply packed transform for a CanvasItem:
+#   x' = M * x + T, with pivot/scale/rotation/offset baked in.
+func _commit_transform(ci: CanvasItem) -> void:
+	if ci == null or not is_instance_valid(ci):
+		return
+
+	var sm := _ensure_sm(ci)
+	if sm == null:
+		return
+
+	var scale: float = 1.0
+	if ci.has_meta("_vfx_scale"):
+		scale = float(ci.get_meta("_vfx_scale"))
+
+	var rot_deg: float = 0.0
+	if ci.has_meta("_vfx_rot_deg"):
+		rot_deg = float(ci.get_meta("_vfx_rot_deg"))
+
+	var ofs: Vector2 = Vector2.ZERO
+	if ci.has_meta("_vfx_offset"):
+		ofs = ci.get_meta("_vfx_offset")
+
+	var pivot := _pivot_for(ci)
+
+	var s := scale
+	var rad := deg_to_rad(rot_deg)
+	var c := cos(rad)
+	var sn := sin(rad)
+
+	# M = R * S, uniform scalar scale
+	var a := c * s
+	var b := -sn * s
+	var c2 := sn * s
+	var d := c * s
+
+	# x' = R * S * (x - pivot) + pivot + ofs
+	#    = M * x + (-M * pivot + pivot + ofs)
+	var mp := Vector2(
+		a * pivot.x + b * pivot.y,
+		c2 * pivot.x + d * pivot.y
+	)
+	var T := pivot + ofs - mp
+
+	sm.set_shader_parameter("u_trs0", Vector4(a, b, c2, d))
+	sm.set_shader_parameter("u_trs1", T)
 	ci.queue_redraw()
 
 
@@ -1136,6 +1202,28 @@ func _anim_bank_has_any_rows_for_key(key: String) -> bool:
 		return true
 	return false
 
+func _sample_all_for_key_cached(key: String, t_ms: int) -> Dictionary:
+	if anim_bank == null or key == "":
+		return {}
+
+	# If time changed, start a new per-frame cache
+	if _frame_sample_time_ms != t_ms:
+		_frame_sample_time_ms = t_ms
+		_frame_sample_cache.clear()
+
+	if _frame_sample_cache.has(key):
+		return _frame_sample_cache[key]
+
+	var res := {
+		"S": anim_bank._sample_scales_for_key(key, t_ms),
+		"C": anim_bank._sample_colors_for_key(key, t_ms),
+		"R": anim_bank._sample_rot_for_key(key, t_ms),
+		"O": anim_bank._sample_offset_for_key(key, t_ms),
+		"G": anim_bank._sample_glow_for_key(key, t_ms),
+	}
+
+	_frame_sample_cache[key] = res
+	return res
 
 
 func _get_effective_key_for_drawer(d: Node) -> String:
@@ -1517,13 +1605,16 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 			_init_part_state(parts)
 			_drawer_parts[d] = parts
 
-		var S: Dictionary = anim_bank._sample_scales_for_key(key, t_ms)
-		if S.is_empty():
+		var samples := _sample_all_for_key_cached(key, t_ms)
+		if samples.is_empty():
 			continue
-		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
-		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
-		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
-		var G: Dictionary = anim_bank._sample_glow_for_key(key, t_ms)  # NEW
+
+		var S: Dictionary = samples["S"]
+		var C: Dictionary = samples["C"]
+		var R: Dictionary = samples["R"]
+		var O: Dictionary = samples["O"]
+		var G: Dictionary = samples["G"]
+
 
 		_apply_drawer_field_transform(d, R, O, false)
 
@@ -1567,14 +1658,16 @@ func _update_trail_drawers(t_ms: int) -> void:
 			_init_part_state(parts)
 			_drawer_parts[d] = parts
 
-		# Same sampling as notes/slide pieces
-		var S: Dictionary = anim_bank._sample_scales_for_key(key, t_ms)
-		if S.is_empty():
+		var samples := _sample_all_for_key_cached(key, t_ms)
+		if samples.is_empty():
 			continue
-		var C: Dictionary = anim_bank._sample_colors_for_key(key, t_ms)
-		var R: Dictionary = anim_bank._sample_rot_for_key(key, t_ms)
-		var O: Dictionary = anim_bank._sample_offset_for_key(key, t_ms)
-		var G: Dictionary = anim_bank._sample_glow_for_key(key, t_ms)
+
+		var S: Dictionary = samples["S"]
+		var C: Dictionary = samples["C"]
+		var R: Dictionary = samples["R"]
+		var O: Dictionary = samples["O"]
+		var G: Dictionary = samples["G"]
+
 
 		# Move whole drawer (trail) with the target offset / rotation
 		_apply_drawer_field_transform(d, R, O, false)
@@ -1719,7 +1812,6 @@ func _apply_parts_all(
 	G: Dictionary,
 	adj_factor: float
 ) -> void:
-
 	if p.is_empty():
 		return
 
@@ -1729,14 +1821,13 @@ func _apply_parts_all(
 	var LO: Dictionary = p["_lastO"]
 	var LG: Dictionary = p["_lastG"]
 
-
 	var head: CanvasItem = p.get("head", null)
 	var tail: CanvasItem = p.get("tail", null)
 	var target_root: Node = p.get("target_root", null)
 	var target_ci: CanvasItem = p.get("target", null)
 	var hold_nodes: Array = p.get("hold_nodes", [])
 
-	# SCALE (with adjacency)
+	# -------- SCALE (with adjacency) --------
 	var head_scale: float = float(S.head) * adj_factor
 	var tail_scale: float = float(S.tail) * adj_factor
 	var target_scale: float = float(S.target) * adj_factor
@@ -1756,18 +1847,19 @@ func _apply_parts_all(
 		for child in (target_root as Node).get_children():
 			if not (child is CanvasItem):
 				continue
-			var cname := String(child.name).to_lower()
+			var ci_child := child as CanvasItem
+			var cname := String(ci_child.name).to_lower()
 			if cname.findn("sprite") != -1 or cname.findn("target") != -1:
 				if LS["tg"] != target_scale:
-					_set_scale(child, target_scale)
+					_set_scale(ci_child, target_scale)
 					LS["tg"] = target_scale
 			elif cname.findn("timingarm2") != -1:
 				if LS["b2"] != bar2_scale:
-					_set_scale(child, bar2_scale)
+					_set_scale(ci_child, bar2_scale)
 					LS["b2"] = bar2_scale
 			elif cname.findn("timingarm") != -1 or cname.findn("bar") != -1:
 				if LS["b1"] != bar1_scale:
-					_set_scale(child, bar1_scale)
+					_set_scale(ci_child, bar1_scale)
 					LS["b1"] = bar1_scale
 
 	for h in hold_nodes:
@@ -1775,7 +1867,7 @@ func _apply_parts_all(
 			_set_scale(h, hold_scale)
 			LS["ho"] = hold_scale
 
-	# COLOR
+	# -------- COLOR --------
 	if head != null and LC["h"] != C.head:
 		_set_color(head, C.head)
 		LC["h"] = C.head
@@ -1788,24 +1880,25 @@ func _apply_parts_all(
 		for child2 in (target_root as Node).get_children():
 			if not (child2 is CanvasItem):
 				continue
-			var cname2 := String(child2.name).to_lower()
+			var ci_child2 := child2 as CanvasItem
+			var cname2 := String(ci_child2.name).to_lower()
 			if cname2.findn("timingarm2") != -1:
 				if LC["b2"] != C.bar2:
-					_set_color(child2, C.bar2)
+					_set_color(ci_child2, C.bar2)
 					LC["b2"] = C.bar2
 			elif cname2.findn("timingarm") != -1 or cname2.findn("bar") != -1:
 				if LC["b1"] != C.bar1:
-					_set_color(child2, C.bar1)
+					_set_color(ci_child2, C.bar1)
 					LC["b1"] = C.bar1
 			elif cname2.findn("sprite") != -1 or cname2.findn("target") != -1:
 				if LC["tg"] != C.target:
-					_set_color(child2, C.target)
+					_set_color(ci_child2, C.target)
 					LC["tg"] = C.target
 			else:
 				if target_root is CanvasItem:
-					var prev_root_col: Color = LC.get("tg_root", Color(9,9,9,0))
+					var prev_root_col: Color = LC.get("tg_root", Color(9, 9, 9, 0))
 					if prev_root_col != C.target:
-						_set_color(target_root, C.target)
+						_set_color(target_root as CanvasItem, C.target)
 						LC["tg_root"] = C.target
 
 	for h2 in hold_nodes:
@@ -1813,7 +1906,7 @@ func _apply_parts_all(
 			_set_color(h2, C.hold)
 			LC["ho"] = C.hold
 
-	# ROTATION
+	# -------- ROTATION --------
 	if head != null and LR["h"] != R.head:
 		_set_rotation(head, R.head)
 		LR["h"] = R.head
@@ -1831,7 +1924,7 @@ func _apply_parts_all(
 			_set_rotation(h3, R.hold)
 			LR["ho"] = R.hold
 
-	# OFFSET
+	# -------- OFFSET --------
 	if head != null and LO["h"] != O.head:
 		_set_offset(head, O.head)
 		LO["h"] = O.head
@@ -1853,17 +1946,18 @@ func _apply_parts_all(
 		for child3 in (target_root as Node).get_children():
 			if not (child3 is CanvasItem):
 				continue
-			var cname3 := String(child3.name).to_lower()
+			var ci_child3 := child3 as CanvasItem
+			var cname3 := String(ci_child3.name).to_lower()
 			if cname3.findn("timingarm2") != -1:
 				if LO["b2"] != O.bar2:
-					_set_offset(child3, O.bar2)
+					_set_offset(ci_child3, O.bar2)
 					LO["b2"] = O.bar2
 			elif cname3.findn("timingarm") != -1 or cname3.findn("bar") != -1:
 				if LO["b1"] != O.bar1:
-					_set_offset(child3, O.bar1)
+					_set_offset(ci_child3, O.bar1)
 					LO["b1"] = O.bar1
 
-	# GLOW (uses same part layout; scaled by adjacency factor)
+	# -------- GLOW (scaled by adjacency) --------
 	var head_glow   : float = float(G.get("head",   0.0)) * adj_factor
 	var tail_glow   : float = float(G.get("tail",   0.0)) * adj_factor
 	var target_glow : float = float(G.get("target", 0.0)) * adj_factor
@@ -1883,24 +1977,43 @@ func _apply_parts_all(
 		for child_g in (target_root as Node).get_children():
 			if not (child_g is CanvasItem):
 				continue
-			var cname_g := String(child_g.name).to_lower()
+			var ci_child_g := child_g as CanvasItem
+			var cname_g := String(ci_child_g.name).to_lower()
 			if cname_g.findn("timingarm2") != -1:
 				if LG["b2"] != bar2_glow:
-					_set_glow(child_g, bar2_glow)
+					_set_glow(ci_child_g, bar2_glow)
 					LG["b2"] = bar2_glow
 			elif cname_g.findn("timingarm") != -1 or cname_g.findn("bar") != -1:
 				if LG["b1"] != bar1_glow:
-					_set_glow(child_g, bar1_glow)
+					_set_glow(ci_child_g, bar1_glow)
 					LG["b1"] = bar1_glow
 			elif cname_g.findn("sprite") != -1 or cname_g.findn("target") != -1:
 				if LG["tg"] != target_glow:
-					_set_glow(child_g, target_glow)
+					_set_glow(ci_child_g, target_glow)
 					LG["tg"] = target_glow
 
 	for h_g in hold_nodes:
 		if h_g is CanvasItem and LG["ho"] != hold_glow:
 			_set_glow(h_g, hold_glow)
 			LG["ho"] = hold_glow
+
+	# -------- COMMIT PACKED TRANSFORMS --------
+	if head != null:
+		_commit_transform(head)
+	if tail != null:
+		_commit_transform(tail)
+	if target_ci != null:
+		_commit_transform(target_ci)
+
+	for h6 in hold_nodes:
+		if h6 is CanvasItem:
+			_commit_transform(h6 as CanvasItem)
+
+	if target_root != null:
+		for ch in (target_root as Node).get_children():
+			if ch is CanvasItem:
+				_commit_transform(ch as CanvasItem)
+
 
 
 
