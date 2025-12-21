@@ -1,3 +1,4 @@
+<img width="839" height="475" alt="Screenshot 2025-11-03 095214" src="https://github.com/user-attachments/assets/72143b95-d6b1-4c92-a137-720ff5631873" />
 # Project-Heartbeat-VFX-Mod
 A mod for Project Heartbeat that enables the VFX Shader Pack.
 
