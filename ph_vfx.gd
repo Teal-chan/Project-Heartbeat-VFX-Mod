@@ -19,9 +19,6 @@ const SLIDE_CHAIN_MAX_HEAD_DT_MS := 400  # how far (in ms) a chain piece can loo
 const PF_ENTRY_TAG := "$PLAYFIELD"
 const PF_USE_ABSOLUTE_CHAIN := true
 
-const RUNTIME_GLOW_GAIN := 1.4  # tweak this until it matches MegaInjector
-
-
 var anim_bank := PHVFXAnimBank.new()
 var _bank_loaded := false
 var _note_shader: Shader = null
@@ -36,8 +33,7 @@ var _ctx_checked := false       # only read statics once
 var _drawer_parts: Dictionary = {}   # Node -> parts dict
 var _drawer_key: Dictionary = {}     # Node -> key string
 var _key_remap: Dictionary = {}      # raw_key -> effective key
-# key -> cached spotlight params from anim bank
-var _spot_param_cache: Dictionary = {}
+
 
 # Extra: slide chain drawers under GameLayer/LAYER_SlideChainPieces
 var _slide_chain_drawers: Array[Node] = []
@@ -52,6 +48,10 @@ var _pf_baseline_pos: Vector2 = Vector2.ZERO
 
 # Extra: trail drawers under GameLayer/LAYER_Trails
 var _trail_drawers: Array[Node] = []
+
+# Runtime time tracking so we can tick even when there are no drawers
+var _rt_last_chart_ms: float = -1.0
+var _rt_last_wall_ms: int = -1
 
 # Spotlight overlay (full-screen)
 var _spot_overlay = null            # ColorRect
@@ -278,6 +278,9 @@ func _detect_vfx_path() -> String:
 func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 	var t_ms: int = int(time_sec * 1000.0)
 	_mirai_last_t_ms = t_ms  # cache current time for Mirai links
+	_rt_last_chart_ms = float(t_ms)
+	_rt_last_wall_ms = Time.get_ticks_msec()
+
 
 	_ensure_bank_loaded()
 	_ensure_note_shader()
@@ -291,8 +294,11 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 	if not drawers.is_empty():
 		first_drawer = drawers[0] as Node
 
-	# Update field slides every tick
 	_update_playfield_slides(t_ms, first_drawer)
+
+	# Full-screen spotlight overlay (uses SPOT rows; must update even
+	# on frames with no drawers so it can turn off at the right time).
+	_update_spot_overlay(drawers, t_ms)
 
 	# If there are no drawers this frame, we still want Mirai lines
 	# to get a chance to despawn based on time / dead notes.
@@ -369,6 +375,31 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 	_update_mirai_link_drawer_refs(drawers)
 	_update_mirai_lines_runtime()
 
+func _process(delta: float) -> void:
+	# If we’ve never seen chart time, nothing to do
+	if _rt_last_chart_ms < 0.0 or _rt_last_wall_ms < 0:
+		return
+	if anim_bank == null:
+		return
+	if _spot_overlay == null or not _spot_overlay.is_inside_tree():
+		return
+
+	# Approximate current chart time from last known chart time + wall-clock delta
+	var now_ms: int = Time.get_ticks_msec()
+	var dt_ms: int = now_ms - _rt_last_wall_ms
+	if dt_ms <= 0:
+		return
+
+	var chart_t_ms: int = int(_rt_last_chart_ms + dt_ms)
+
+	# We don’t have any drawers on these frames, so pass an empty array.
+	# _update_spot_overlay will sample SPOT rows at chart_t_ms and
+	# turn itself off once there’s no active SPOT anymore.
+	_update_spot_overlay([], chart_t_ms)
+
+	# Optionally, keep playfield slides & Mirai lines moving too:
+	_update_playfield_slides(chart_t_ms, null)
+	_update_mirai_lines_runtime()
 
 
 # ─────────────────────────────────────────────
@@ -512,13 +543,14 @@ func _set_color(ci: CanvasItem, col: Color) -> void:
 
 
 func _set_glow(ci: CanvasItem, g: float) -> void:
+	if ci == null or not is_instance_valid(ci):
+		return
 	var sm := _ensure_sm(ci)
 	if sm == null:
 		return
-	var gg := max(g * RUNTIME_GLOW_GAIN, 0.0)
-	sm.set_shader_parameter("u_glow", gg)
+	# Parity with MegaInjector: pass glow straight through
+	sm.set_shader_parameter("u_glow", max(g, 0.0))
 	ci.queue_redraw()
-
 
 # Compute and apply packed transform for a CanvasItem:
 #   x' = M * x + T, with pivot/scale/rotation/offset baked in.
@@ -607,7 +639,6 @@ func _ensure_spot_overlay(any_drawer: Node) -> void:
 		return
 
 	# Find a Control ancestor to attach the overlay to.
-	# This survives even if GameLayer is wrapped in PH_PlayfieldWrapper_ALL.
 	var attach_ctrl: Control = null
 	cur = game_layer.get_parent()
 	while cur != null:
@@ -617,39 +648,68 @@ func _ensure_spot_overlay(any_drawer: Node) -> void:
 		cur = cur.get_parent()
 
 	if attach_ctrl == null:
-		# No suitable Control in the chain; nothing we can safely attach to.
 		return
 
 	# Reuse existing overlay if present on that Control
 	var existing: Node = attach_ctrl.get_node_or_null("PH_SpotOverlay")
 	if existing != null and existing is ColorRect:
 		_spot_overlay = existing
+	else:
+		# Create a new full-screen ColorRect overlay
+		var cr: ColorRect = ColorRect.new()
+		cr.name = "PH_SpotOverlay"
+		cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		# Full-screen anchors
+		cr.anchor_left   = 0.0
+		cr.anchor_top    = 0.0
+		cr.anchor_right  = 1.0
+		cr.anchor_bottom = 1.0
+		cr.offset_left   = 0.0
+		cr.offset_top    = 0.0
+		cr.offset_right  = 0.0
+		cr.offset_bottom = 0.0
+
+		var sm: ShaderMaterial = ShaderMaterial.new()
+		sm.shader = _get_spot_shader()
+		cr.material = sm
+
+		attach_ctrl.add_child(cr)
+		attach_ctrl.move_child(cr, attach_ctrl.get_child_count() - 1) # draw on top
+
+		_spot_overlay = cr
+
+	# ── NEW: ensure a runtime ticker Timer exists on the same Control ──
+	var ticker = attach_ctrl.get_node_or_null("PH_VFX_RuntimeTicker")
+	if ticker == null:
+		ticker = Timer.new()
+		ticker.name = "PH_VFX_RuntimeTicker"
+		ticker.one_shot = false
+		ticker.wait_time = 0.03  # ~33 FPS is enough for VFX
+		attach_ctrl.add_child(ticker)
+		ticker.timeout.connect(Callable(self, "_on_runtime_tick"))
+		ticker.start()
+
+func _on_runtime_tick() -> void:
+	# If we never got a chart time, or overlay is gone, do nothing
+	if _spot_overlay == null or not _spot_overlay.is_inside_tree():
+		return
+	if _rt_last_chart_ms < 0.0 or _rt_last_wall_ms < 0:
 		return
 
-	# Create a new full-screen ColorRect overlay
-	var cr: ColorRect = ColorRect.new()
-	cr.name = "PH_SpotOverlay"
-	cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var wall_now: int = Time.get_ticks_msec()
+	var dt_ms: int = wall_now - _rt_last_wall_ms
+	if dt_ms < 0:
+		dt_ms = 0
 
-	# Full-screen anchors
-	cr.anchor_left   = 0.0
-	cr.anchor_top    = 0.0
-	cr.anchor_right  = 1.0
-	cr.anchor_bottom = 1.0
-	cr.offset_left   = 0.0
-	cr.offset_top    = 0.0
-	cr.offset_right  = 0.0
-	cr.offset_bottom = 0.0
+	var t_est: int = int(_rt_last_chart_ms + float(dt_ms))
 
-	var sm: ShaderMaterial = ShaderMaterial.new()
-	sm.shader = _get_spot_shader()
-	cr.material = sm
-
-	attach_ctrl.add_child(cr)
-	attach_ctrl.move_child(cr, attach_ctrl.get_child_count() - 1) # draw on top
-
-	_spot_overlay = cr
-
+	# We don't have any current drawers here, but _update_spot_overlay only
+	# needs time to decide whether SPOT is active; it already handles an
+	# empty drawer list.
+	var empty_drawers: Array = []
+	_update_spot_overlay(empty_drawers, t_est)
+	_update_mirai_lines_runtime()
 
 func _note_drawer_to_screen_uv(d: Node, prefer_head: bool = false) -> Vector2:
 	if d == null or not d.is_inside_tree():
@@ -717,101 +777,151 @@ func _update_spotlight_for_drawer(d: Node, sm: ShaderMaterial) -> void:
 	sm.set_shader_parameter("u_spot2_center", icon_uv)
 
 
-func _update_spot_overlay(_drawers: Array, t_ms: int) -> void:
+func _update_spot_overlay(drawers: Array, t_ms: int) -> void:
+	# No overlay or no bank → nothing to do
 	if _spot_overlay == null or not _spot_overlay.is_inside_tree():
 		return
 	if anim_bank == null:
+		return
+
+	# If there are no SPOT rows at all, hard-disable the overlay
+	if anim_bank.buckets_spot.is_empty():
+		var sm0 := _spot_overlay.material as ShaderMaterial
+		if sm0 != null:
+			sm0.set_shader_parameter("u_tint", Color(0, 0, 0, 0.0))
+			sm0.set_shader_parameter("u_spot2_enable", false)
+		_spot_overlay.visible = false
 		return
 
 	var sm := _spot_overlay.material as ShaderMaterial
 	if sm == null:
 		return
 
-	# Prune dead drawers (ones that have been freed / left the tree)
-	var alive: Array = []
-	for d in _spot_drawers:
-		if d != null and d.is_inside_tree():
-			alive.append(d)
-	_spot_drawers = alive
-
-	var found_spot := false
-
 	# Keep circles round in screen space
-	var vp = _spot_overlay.get_viewport()
+	var vp: Viewport = _spot_overlay.get_viewport()
 	if vp != null:
-		var rect = vp.get_visible_rect()
-		if rect.size.y != 0:
-			var ratio = float(rect.size.x) / float(rect.size.y)
+		var rect: Rect2 = vp.get_visible_rect()
+		if rect.size.y != 0.0:
+			var ratio: float = rect.size.x / rect.size.y
 			sm.set_shader_parameter("u_screen_ratio", Vector2(ratio, 1.0))
 
-	# Pick the first alive spotlight drawer and drive the overlay from it
-	for d in _spot_drawers:
+	# ----------------------------------------------------------------
+	# 1) Choose the best active SPOT at this time (mirrors MegaInjector)
+	# ----------------------------------------------------------------
+	var best_key := ""
+	var best_prio := -2147483648
+	var best_start := -1
+	var best_spot: Dictionary = {}
+	var best_prev: Dictionary = {}
+	var best_next: Dictionary = {}
+
+	for key_v in anim_bank.buckets_spot.keys():
+		var key := String(key_v)
+
+		var times_for_key: PackedInt32Array = anim_bank.times_spot.get(key, PackedInt32Array())
+		if times_for_key.is_empty():
+			continue
+
+		var first_t: int = times_for_key[0]
+		var last_t: int = times_for_key[times_for_key.size() - 1]
+		if t_ms < first_t or t_ms > last_t:
+			continue
+
+		var pair := anim_bank._pair_around_time(anim_bank.times_spot, anim_bank.buckets_spot, key, t_ms)
+		var prev_r: Dictionary = pair[0]
+		var next_r: Dictionary = pair[1]
+		if prev_r.is_empty():
+			continue
+
+		var spot := anim_bank._sample_spot_for_key(key, t_ms)
+		if not bool(spot.get("enable", false)):
+			continue
+
+		var prio0 := int(prev_r.get("spot_priority", prev_r.get("priority", 0)))
+		var prio1 := prio0
+		if not next_r.is_empty():
+			prio1 = int(next_r.get("spot_priority", next_r.get("priority", prio0)))
+		var prio := (prio0 if prio0 > prio1 else prio1)
+
+		var start_time := int(prev_r.get("time", t_ms))
+
+		if prio > best_prio or (prio == best_prio and start_time > best_start):
+			best_prio = prio
+			best_start = start_time
+			best_key = key
+			best_spot = spot
+			best_prev = prev_r
+			best_next = next_r
+
+	# No active SPOT at this time → disable overlay immediately
+	if best_key == "" or best_spot.is_empty() or not bool(best_spot.get("enable", false)):
+		sm.set_shader_parameter("u_tint", Color(0, 0, 0, 0.0))
+		sm.set_shader_parameter("u_spot2_enable", false)
+		_spot_overlay.visible = false
+		return
+
+
+	# ----------------------------------------------------------------
+	# 2) Find a drawer to anchor the spotlight to (target/head)
+	# ----------------------------------------------------------------
+
+	# First try any drawer from this frame
+	var anchor: Node = null
+	for d_v in drawers:
+		var d: Node = d_v
 		if d == null or not d.is_inside_tree():
 			continue
+		if _get_effective_key_for_drawer(d) == best_key:
+			anchor = d
+			break
 
-		var key := _get_effective_key_for_drawer(d)
-		if key == "":
-			continue
-		if not anim_bank.buckets_spot.has(key):
-			continue
+	# Fallback: any cached spotlight drawer that still matches best_key
+	if anchor == null and not _spot_drawers.is_empty():
+		var alive: Array = []
+		for d2 in _spot_drawers:
+			if d2 != null and d2.is_inside_tree():
+				alive.append(d2)
+		_spot_drawers = alive
 
-		# Cache static SPOT params per key (ignore time; note lifetime controls on/off)
-		if not _spot_param_cache.has(key):
-			var rows: Array = anim_bank.buckets_spot[key]
-			var radius = 0.30
-			var soft   = 0.20
-			var dim    = 0.15
-			if rows.size() > 0:
-				var r0: Dictionary = rows[0]
-				radius = float(r0.get("spot_radius", radius))
-				soft   = float(r0.get("spot_soft", soft))
-				dim    = float(r0.get("spot_dim", dim))
-			_spot_param_cache[key] = {
-				"radius": radius,
-				"soft":   soft,
-				"dim":    dim,
-			}
+		for d2 in _spot_drawers:
+			if _get_effective_key_for_drawer(d2) == best_key:
+				anchor = d2
+				break
 
-		var spot: Dictionary = _spot_param_cache[key]
-		var radius2 = float(spot.get("radius", 0.30))
-		var soft2   = float(spot.get("soft", 0.20))
-		var dim2    = float(spot.get("dim", 0.15))  # 0 = black outside, 1 = no dim
+	# Compute UVs – if we don't find a drawer, fall back to center screen
+	var target_uv := Vector2(0.5, 0.5)
+	var icon_uv := target_uv
 
-		found_spot = true
+	if anchor != null:
+		target_uv = _note_drawer_to_screen_uv(anchor, false)
+		icon_uv = _note_drawer_to_screen_uv(anchor, true)
 
-		# Spot 1 → target / judgment ring
-		var target_uv: Vector2 = _note_drawer_to_screen_uv(d, false)
-		# Spot 2 → icon / head
-		var icon_uv: Vector2 = _note_drawer_to_screen_uv(d, true)
+	# ----------------------------------------------------------------
+	# 3) Drive shader parameters from sampled SPOT row (parity with editor)
+	# ----------------------------------------------------------------
+	var base_radius: float = float(best_spot.get("radius", 0.12))
+	var soft: float = float(best_spot.get("soft", 0.20))
+	var dim: float = float(best_spot.get("dim", 0.15))
 
-		# dim is "brightness outside spot"; overlay alpha is (1 - dim)
-		var alpha: float = clamp(1.0 - dim2, 0.0, 1.0)
-		var tint_col := Color(0.0, 0.0, 0.0, alpha)
+	var radius2: float = base_radius * 0.7
+	var soft2: float = soft * 0.7
 
-		sm.set_shader_parameter("u_tint", tint_col)
+	var alpha: float = clamp(1.0 - dim, 0.0, 1.0)
 
-		# Main spotlight: target
-		sm.set_shader_parameter("u_spot1_center", target_uv)
-		sm.set_shader_parameter("u_spot1_radius", radius2)
-		sm.set_shader_parameter("u_spot1_soft",   soft2)
+	sm.set_shader_parameter("u_tint", Color(0.0, 0.0, 0.0, alpha))
 
-		# Secondary spotlight: icon / head
-		sm.set_shader_parameter("u_spot2_enable", true)
-		sm.set_shader_parameter("u_spot2_center", icon_uv)
-		sm.set_shader_parameter("u_spot2_radius", radius2 * 0.7)
-		sm.set_shader_parameter("u_spot2_soft",   soft2 * 0.7)
+	# Main spotlight: target / judgement ring
+	sm.set_shader_parameter("u_spot1_center", target_uv)
+	sm.set_shader_parameter("u_spot1_radius", base_radius)
+	sm.set_shader_parameter("u_spot1_soft",   soft)
 
-		break  # one spotlighted note is enough
+	# Secondary spotlight: icon / head
+	sm.set_shader_parameter("u_spot2_enable", true)
+	sm.set_shader_parameter("u_spot2_center", icon_uv)
+	sm.set_shader_parameter("u_spot2_radius", radius2)
+	sm.set_shader_parameter("u_spot2_soft",   soft2)
+	_spot_overlay.visible = true
 
-	# Toggle visibility based on whether any spotlight drawer is active
-	_spot_overlay.visible = found_spot
-
-	if not found_spot:
-		# Make sure shader itself is harmless when disabled
-		sm.set_shader_parameter("u_tint", Color(0, 0, 0, 0))
-		sm.set_shader_parameter("u_spot1_radius", 0.0)
-		sm.set_shader_parameter("u_spot1_soft", 0.0)
-		sm.set_shader_parameter("u_spot2_enable", false)
 
 
 
@@ -1957,13 +2067,13 @@ func _apply_parts_all(
 					_set_offset(ci_child3, O.bar1)
 					LO["b1"] = O.bar1
 
-	# -------- GLOW (scaled by adjacency) --------
-	var head_glow   : float = float(G.get("head",   0.0)) * adj_factor
-	var tail_glow   : float = float(G.get("tail",   0.0)) * adj_factor
-	var target_glow : float = float(G.get("target", 0.0)) * adj_factor
-	var bar1_glow   : float = float(G.get("bar1",   0.0)) * adj_factor
-	var bar2_glow   : float = float(G.get("bar2",   bar1_glow)) * adj_factor
-	var hold_glow   : float = float(G.get("hold",   0.0)) * adj_factor
+	# -------- GLOW (no adjacency scaling – match MegaInjector) --------
+	var head_glow   : float = float(G.get("head",   0.0))
+	var tail_glow   : float = float(G.get("tail",   0.0))
+	var target_glow : float = float(G.get("target", 0.0))
+	var bar1_glow   : float = float(G.get("bar1",   0.0))
+	var bar2_glow   : float = float(G.get("bar2",   0.0))
+	var hold_glow   : float = float(G.get("hold",   0.0))
 
 	if head != null and LG["h"] != head_glow:
 		_set_glow(head, head_glow)
@@ -2104,7 +2214,6 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_slide_chain_drawers.clear()
 	_extra_cached = false
 	_spot_drawers.clear()
-	_spot_param_cache.clear()
 
 	# Playfield slides
 	_pf_rows_loaded = false
@@ -2119,6 +2228,10 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_mirai_rows_loaded = false
 	_mirai_links.clear()
 	_mirai_line_root = null
+
+	# <<< NEW: reset runtime time tracking >>>
+	_rt_last_chart_ms = -1.0
+	_rt_last_wall_ms = -1
 
 	_mark_adjacent_notes(points)
 	return points
