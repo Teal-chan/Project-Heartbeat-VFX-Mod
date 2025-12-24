@@ -4,7 +4,7 @@
 A mod for Project Heartbeat that enables the VFX Shader Pack.
 
 It's a lot easier to just install this instead:
-https://drive.google.com/file/d/1IUwJVFnK2TRDc6IY1mGpU0EM-v944aTM/view?usp=sharing
+https://drive.google.com/file/d/13mv0V3LoFqH7xxxSZnXrwPSisEBYG2f8/view?usp=sharing
 
 If you want to try to install it the fancy way, here is how to do it:
 https://docs.google.com/document/d/10dVzzJg0QXKXac_DM4VDYr11qJzUqZjVOY8aETnJ_DQ/edit?usp=sharing
