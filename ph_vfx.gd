@@ -17,6 +17,7 @@ const VFX_META_SM       := "_vfx_sm"
 const SLIDE_CHAIN_MAX_HEAD_DT_MS := 400  # how far (in ms) a chain piece can look for its head
 
 const PF_ENTRY_TAG := "$PLAYFIELD"
+const PF_ROTATE_TAG := "$PF_ROTATE_SEL"
 const PF_USE_ABSOLUTE_CHAIN := true
 
 var anim_bank := PHVFXAnimBank.new()
@@ -45,6 +46,11 @@ var _pf_rows: Array = []                # [{t0, t1, endpoint: Vector2, ease: Str
 var _pf_chain: Array = []               # [{t0, t1, base: Vector2, end: Vector2, ease}]
 var _pf_wrapper: Node2D = null          # runtime wrapper around GameLayer
 var _pf_baseline_pos: Vector2 = Vector2.ZERO
+
+# NEW: rotation rows for playfield
+var _pf_rot_rows: Array = []            # raw rotation rows
+var _pf_rot_chain: Array = []           # [{t0,t1,a0,a1,ease,pivot_parent}]
+var _pf_game_layer: Node2D = null       # GameLayer reference for pivot conversion
 
 # Extra: trail drawers under GameLayer/LAYER_Trails
 var _trail_drawers: Array[Node] = []
@@ -431,6 +437,12 @@ func _ensure_bank_loaded() -> void:
 	_pf_chain.clear()
 	_pf_wrapper = null
 	_pf_baseline_pos = Vector2.ZERO
+	
+	# NEW: reset playfield rotation for this chart
+	_pf_rot_rows.clear()
+	_pf_rot_chain.clear()
+	_pf_game_layer = null
+
 
 	# Mirai rows will be (re)loaded lazily
 	_mirai_rows_loaded = false
@@ -1439,8 +1451,11 @@ func _ensure_playfield_rows_loaded() -> void:
 	if _pf_rows_loaded:
 		return
 	_pf_rows_loaded = true
+
 	_pf_rows.clear()
 	_pf_chain.clear()
+	_pf_rot_rows.clear()
+	_pf_rot_chain.clear()
 
 	if _current_vfx_path == "" or not FileAccess.file_exists(_current_vfx_path):
 		return
@@ -1458,40 +1473,79 @@ func _ensure_playfield_rows_loaded() -> void:
 			continue
 		var e: Dictionary = e_v
 		var layer_name := String(e.get("layer", ""))
-		if layer_name != PF_ENTRY_TAG:
-			continue
 
-		var t0 := float(e.get("pf_slide_start_time", 0.0))
-		var t1 := float(e.get("pf_slide_end_time", 0.0))
-		if t1 <= t0:
-			continue
+		# ---- Slides ----
+		if layer_name == PF_ENTRY_TAG:
+			var t0 := float(e.get("pf_slide_start_time", 0.0))
+			var t1 := float(e.get("pf_slide_end_time", 0.0))
+			if t1 <= t0:
+				continue
 
-		var ep_val = e.get("pf_slide_endpoint", null)
-		var endpoint := Vector2.ZERO
-		if typeof(ep_val) == TYPE_ARRAY:
-			var arr: Array = ep_val
-			if arr.size() >= 2:
-				endpoint = Vector2(float(arr[0]), float(arr[1]))
+			var ep_val = e.get("pf_slide_endpoint", null)
+			var endpoint := Vector2.ZERO
+			if typeof(ep_val) == TYPE_ARRAY:
+				var arr: Array = ep_val
+				if arr.size() >= 2:
+					endpoint = Vector2(float(arr[0]), float(arr[1]))
 
-		var ease := String(e.get("pf_slide_ease", "linear"))
+			var ease := String(e.get("pf_slide_ease", "linear"))
 
-		_pf_rows.append({
-			"t0": t0,
-			"t1": t1,
-			"endpoint": endpoint,
-			"ease": ease,
-		})
+			_pf_rows.append({
+				"t0": t0,
+				"t1": t1,
+				"endpoint": endpoint,
+				"ease": ease,
+			})
 
-	# Detect seconds vs ms (same heuristic as your editor script)
+		# ---- Rotations (pivot in same space as slide endpoints) ----
+		elif layer_name == PF_ROTATE_TAG:
+			var rt0 := float(e.get("pf_rot_start_time", 0.0))
+			var rt1 := float(e.get("pf_rot_end_time", 0.0))
+			if rt1 <= rt0:
+				continue
+
+			var a0 := float(e.get("pf_rot_angle_start_deg", 0.0))
+			var a1 := float(e.get("pf_rot_angle_end_deg", 0.0))
+			var rease := String(e.get("pf_rot_ease", "linear"))
+
+			# NOTE: this is in parent-of-GameLayer space
+			var pv_val = e.get("pf_rot_pivot_local", null)
+			var pivot_parent := Vector2.ZERO
+			if typeof(pv_val) == TYPE_ARRAY:
+				var parr: Array = pv_val
+				if parr.size() >= 2:
+					pivot_parent = Vector2(float(parr[0]), float(parr[1]))
+
+			_pf_rot_rows.append({
+				"t0": rt0,
+				"t1": rt1,
+				"a0": a0,
+				"a1": a1,
+				"ease": rease,
+				"pivot_parent": pivot_parent,
+			})
+
+	# ---- seconds vs ms heuristic (slides + rotations) ----
 	var max_end := 0.0
 	for r in _pf_rows:
 		var e_t := float(r["t1"])
 		if e_t > max_end:
 			max_end = e_t
+	for rr in _pf_rot_rows:
+		var e_rt := float(rr["t1"])
+		if e_rt > max_end:
+			max_end = e_rt
+
 	if max_end > 0.0 and max_end <= 600.0:
 		for r2 in _pf_rows:
 			r2["t0"] = float(r2["t0"]) * 1000.0
 			r2["t1"] = float(r2["t1"]) * 1000.0
+		for rr2 in _pf_rot_rows:
+			rr2["t0"] = float(rr2["t0"]) * 1000.0
+			rr2["t1"] = float(rr2["t1"]) * 1000.0
+
+	print("%s: PF rows loaded → slides:%d  rotates:%d  from:%s"
+		% [LOG_NAME, _pf_rows.size(), _pf_rot_rows.size(), _current_vfx_path])
 
 
 func _build_pf_chain() -> void:
@@ -1523,10 +1577,25 @@ func _build_pf_chain() -> void:
 
 		prev_end = end_pos
 
+func _build_pf_rot_chain() -> void:
+	_pf_rot_chain.clear()
+	if _pf_rot_rows.is_empty():
+		return
+
+	for r in _pf_rot_rows:
+		_pf_rot_chain.append(r.duplicate())
+
+	_pf_rot_chain.sort_custom(func(a, b):
+		return float(a["t0"]) < float(b["t0"])
+	)
+
+	print("%s: PF rot chain built → rows:%d  segments:%d"
+		% [LOG_NAME, _pf_rot_rows.size(), _pf_rot_chain.size()])
+
 
 func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 	# No rows => no wrapper
-	if _pf_rows.is_empty():
+	if _pf_rows.is_empty() and _pf_rot_rows.is_empty():
 		return
 	# Already have a wrapper?
 	if _pf_wrapper != null and _pf_wrapper.is_inside_tree():
@@ -1555,12 +1624,12 @@ func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 	if existing is Node2D and (existing as Node2D).is_ancestor_of(game_layer):
 		_pf_wrapper = existing as Node2D
 		_pf_baseline_pos = _pf_wrapper.position
+		_pf_game_layer = game_layer
 	else:
 		# Create wrapper and reparent GameLayer into it
 		var wrapper := Node2D.new()
-		wrapper.name = "PH_PlayfieldWrapper_RUNTIME"
+		wrapper.name = "PH_PlayfieldWrapper_Runtime"
 		parent.add_child(wrapper)
-		# Put wrapper where GameLayer was in the draw order
 		parent.move_child(wrapper, game_layer.get_index())
 
 		var gp: Vector2 = game_layer.get_global_position()
@@ -1570,12 +1639,15 @@ func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 
 		_pf_wrapper = wrapper
 		_pf_baseline_pos = _pf_wrapper.position
+		_pf_game_layer = game_layer
 
 	_build_pf_chain()
+	_build_pf_rot_chain()
 
 
 func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
-	if _pf_rows.is_empty():
+	# Nothing to do if there are no slide *and* no rotation rows
+	if _pf_rows.is_empty() and _pf_rot_rows.is_empty():
 		return
 
 	# Make sure we have a wrapper. If we already made one, we don't need a drawer.
@@ -1583,12 +1655,45 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 		_ensure_playfield_wrapper_from_drawer(any_drawer)
 	if _pf_wrapper == null or not _pf_wrapper.is_inside_tree():
 		return
-	if _pf_chain.is_empty():
-		return
 
-	var pos := _eval_pf_pos(float(t_ms))
+	# Ensure chains built
+	if _pf_chain.is_empty() and not _pf_rows.is_empty():
+		_build_pf_chain()
+	if _pf_rot_chain.is_empty() and not _pf_rot_rows.is_empty():
+		_build_pf_rot_chain()
+
+	var t := float(t_ms)
+
+	# Slides: evaluate wrapper base position
+	var pos := _eval_pf_pos(t)
+
+	# Rotation around pivot(s)
+	var angle_now_deg := 0.0
+	if not _pf_rot_chain.is_empty() and t > float(_pf_rot_chain[0]["t0"]):
+		for s in _pf_rot_chain:
+			var t0 := float(s["t0"])
+			var t1 := float(s["t1"])
+			var pv: Vector2 = s["pivot_parent"]
+
+			if t < t0:
+				break
+			elif t <= t1:
+				var pr := _progress(t, t0, t1)
+				var eased := _ease_eval(String(s["ease"]), pr)
+				angle_now_deg = lerp(float(s["a0"]), float(s["a1"]), eased)
+				pos = pv + (pos - pv).rotated(deg_to_rad(angle_now_deg))
+				break
+			else:
+				# Past this segment → "baked" end angle
+				angle_now_deg = float(s["a1"])
+				pos = pv + (pos - pv).rotated(deg_to_rad(angle_now_deg))
+
+	# Commit transform to wrapper
 	if _pf_wrapper.position != pos:
 		_pf_wrapper.position = pos
+	if abs(_pf_wrapper.rotation_degrees - angle_now_deg) > 0.001:
+		_pf_wrapper.rotation_degrees = angle_now_deg
+
 
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
@@ -2221,6 +2326,12 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_pf_chain.clear()
 	_pf_wrapper = null
 	_pf_baseline_pos = Vector2.ZERO
+	
+	# NEW: playfield rotation
+	_pf_rot_rows.clear()
+	_pf_rot_chain.clear()
+	_pf_game_layer = null
+
 
 	# Mirai lines (runtime)
 	if _mirai_line_root != null and is_instance_valid(_mirai_line_root):
