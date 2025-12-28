@@ -7,7 +7,7 @@ If you want to try to install it the fancy way, here is how to do it:
 https://docs.google.com/document/d/10dVzzJg0QXKXac_DM4VDYr11qJzUqZjVOY8aETnJ_DQ/edit?usp=sharing
 
 It's a lot easier to just install this instead:
-https://drive.google.com/file/d/1YdpyAnOGg_gmKlCvH8u_k_2CIiJqxZ1i/view?usp=sharing
+https://drive.google.com/file/d/1hcA-tc6NnqBB12_-ru6eXaOyrQ1fc2cZ/view?usp=sharing
 
 Instructions:
 Find the file called "Project Heartbeat.pck" in your Steam folder and replace it with the one in the google link.
