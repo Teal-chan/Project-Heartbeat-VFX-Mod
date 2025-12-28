@@ -19,6 +19,7 @@ const SLIDE_CHAIN_MAX_HEAD_DT_MS := 400  # how far (in ms) a chain piece can loo
 const PF_ENTRY_TAG := "$PLAYFIELD"
 const PF_ROTATE_TAG := "$PF_ROTATE_SEL"
 const PF_USE_ABSOLUTE_CHAIN := true
+const PF_SCALE_TAG := "$PF_SCALE_SEL" # NEW
 
 var anim_bank := PHVFXAnimBank.new()
 var _bank_loaded := false
@@ -51,6 +52,10 @@ var _pf_baseline_pos: Vector2 = Vector2.ZERO
 var _pf_rot_rows: Array = []            # raw rotation rows
 var _pf_rot_chain: Array = []           # [{t0,t1,a0,a1,ease,pivot_parent}]
 var _pf_game_layer: Node2D = null       # GameLayer reference for pivot conversion
+
+# NEW: scale rows for playfield
+var _pf_scale_rows: Array = []          # NEW: [{t0,t1,s0,s1,ease}]
+var _pf_baseline_scale: float = 1.0     # NEW: wrapper’s baseline uniform scale
 
 # Extra: trail drawers under GameLayer/LAYER_Trails
 var _trail_drawers: Array[Node] = []
@@ -443,6 +448,9 @@ func _ensure_bank_loaded() -> void:
 	_pf_rot_chain.clear()
 	_pf_game_layer = null
 
+	# NEW: reset playfield scale for this chart
+	_pf_scale_rows.clear()
+	_pf_baseline_scale = 1.0
 
 	# Mirai rows will be (re)loaded lazily
 	_mirai_rows_loaded = false
@@ -1456,6 +1464,7 @@ func _ensure_playfield_rows_loaded() -> void:
 	_pf_chain.clear()
 	_pf_rot_rows.clear()
 	_pf_rot_chain.clear()
+	_pf_scale_rows.clear()
 
 	if _current_vfx_path == "" or not FileAccess.file_exists(_current_vfx_path):
 		return
@@ -1525,7 +1534,26 @@ func _ensure_playfield_rows_loaded() -> void:
 				"pivot_parent": pivot_parent,
 			})
 
-	# ---- seconds vs ms heuristic (slides + rotations) ----
+		# ---- Scale (uniform wrapper scale multiplier) ----
+		elif layer_name == PF_SCALE_TAG:
+			var st0 := float(e.get("pf_scale_start_time", 0.0))
+			var st1 := float(e.get("pf_scale_end_time", 0.0))
+			if st1 <= st0:
+				continue
+
+			var s0 := float(e.get("pf_scale_start_mult", 1.0))
+			var s1 := float(e.get("pf_scale_end_mult",   1.0))
+			var sease := String(e.get("pf_scale_ease", "linear"))
+
+			_pf_scale_rows.append({
+				"t0": st0,
+				"t1": st1,
+				"s0": s0,
+				"s1": s1,
+				"ease": sease,
+			})
+
+	# ---- seconds vs ms heuristic (slides + rotations + scale) ----
 	var max_end := 0.0
 	for r in _pf_rows:
 		var e_t := float(r["t1"])
@@ -1535,6 +1563,10 @@ func _ensure_playfield_rows_loaded() -> void:
 		var e_rt := float(rr["t1"])
 		if e_rt > max_end:
 			max_end = e_rt
+	for sr in _pf_scale_rows:  # NEW
+		var e_st := float(sr["t1"])
+		if e_st > max_end:
+			max_end = e_st
 
 	if max_end > 0.0 and max_end <= 600.0:
 		for r2 in _pf_rows:
@@ -1543,9 +1575,13 @@ func _ensure_playfield_rows_loaded() -> void:
 		for rr2 in _pf_rot_rows:
 			rr2["t0"] = float(rr2["t0"]) * 1000.0
 			rr2["t1"] = float(rr2["t1"]) * 1000.0
+		for sr2 in _pf_scale_rows:     # NEW
+			sr2["t0"] = float(sr2["t0"]) * 1000.0
+			sr2["t1"] = float(sr2["t1"]) * 1000.0
 
-	print("%s: PF rows loaded → slides:%d  rotates:%d  from:%s"
-		% [LOG_NAME, _pf_rows.size(), _pf_rot_rows.size(), _current_vfx_path])
+	print("%s: PF rows loaded → slides:%d  rotates:%d  scales:%d  from:%s"
+		% [LOG_NAME, _pf_rows.size(), _pf_rot_rows.size(), _pf_scale_rows.size(), _current_vfx_path])
+
 
 
 func _build_pf_chain() -> void:
@@ -1595,7 +1631,7 @@ func _build_pf_rot_chain() -> void:
 
 func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 	# No rows => no wrapper
-	if _pf_rows.is_empty() and _pf_rot_rows.is_empty():
+	if _pf_rows.is_empty() and _pf_rot_rows.is_empty() and _pf_scale_rows.is_empty():
 		return
 	# Already have a wrapper?
 	if _pf_wrapper != null and _pf_wrapper.is_inside_tree():
@@ -1641,13 +1677,18 @@ func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 		_pf_baseline_pos = _pf_wrapper.position
 		_pf_game_layer = game_layer
 
+	# NEW: capture baseline uniform scale (fallback to 1.0)
+	if _pf_wrapper != null:
+		var sc: Vector2 = _pf_wrapper.scale
+		_pf_baseline_scale = (sc.x if sc.x != 0.0 else 1.0)
+
 	_build_pf_chain()
 	_build_pf_rot_chain()
 
 
 func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
-	# Nothing to do if there are no slide *and* no rotation rows
-	if _pf_rows.is_empty() and _pf_rot_rows.is_empty():
+	# Nothing to do if there are no slide, rotation, *and* scale rows
+	if _pf_rows.is_empty() and _pf_rot_rows.is_empty() and _pf_scale_rows.is_empty():
 		return
 
 	# Make sure we have a wrapper. If we already made one, we don't need a drawer.
@@ -1664,37 +1705,30 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 
 	var t := float(t_ms)
 
-	# Slides: evaluate wrapper base position
+	# Slides: evaluate wrapper base position (no rotation yet)
 	var pos := _eval_pf_pos(t)
 
-	# Rotation around pivot(s)
+	# Rotation: single global angle + pivot, same semantics as editor
 	var angle_now_deg := 0.0
-	if not _pf_rot_chain.is_empty() and t > float(_pf_rot_chain[0]["t0"]):
-		for s in _pf_rot_chain:
-			var t0 := float(s["t0"])
-			var t1 := float(s["t1"])
-			var pv: Vector2 = s["pivot_parent"]
+	if not _pf_rot_chain.is_empty():
+		var rot_res := _eval_pf_rot_at(t)
+		if rot_res.get("ok", false):
+			angle_now_deg = float(rot_res["angle"])
+			var seg: Dictionary = rot_res["seg"]
+			var pv: Vector2 = seg.get("pivot_parent", Vector2.ZERO)
+			pos = pv + (pos - pv).rotated(deg_to_rad(angle_now_deg))
 
-			if t < t0:
-				break
-			elif t <= t1:
-				var pr := _progress(t, t0, t1)
-				var eased := _ease_eval(String(s["ease"]), pr)
-				angle_now_deg = lerp(float(s["a0"]), float(s["a1"]), eased)
-				pos = pv + (pos - pv).rotated(deg_to_rad(angle_now_deg))
-				break
-			else:
-				# Past this segment → "baked" end angle
-				angle_now_deg = float(s["a1"])
-				pos = pv + (pos - pv).rotated(deg_to_rad(angle_now_deg))
+	# --- NEW: Field scale (wrapper) ---
+	var sfac := _eval_pf_scale_at(t)
+	var target_scale := _pf_baseline_scale * sfac
 
 	# Commit transform to wrapper
 	if _pf_wrapper.position != pos:
 		_pf_wrapper.position = pos
 	if abs(_pf_wrapper.rotation_degrees - angle_now_deg) > 0.001:
 		_pf_wrapper.rotation_degrees = angle_now_deg
-
-
+	if abs(_pf_wrapper.scale.x - target_scale) > 0.001 or abs(_pf_wrapper.scale.y - target_scale) > 0.001:
+		_pf_wrapper.scale = Vector2(target_scale, target_scale)
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
 	if t1 <= t0:
@@ -1748,6 +1782,66 @@ func _eval_pf_pos(t_ms: float) -> Vector2:
 
 	return _pf_chain[_pf_chain.size() - 1]["end"]
 
+func _eval_pf_rot_at(t_ms: float) -> Dictionary:
+	if _pf_rot_chain.is_empty():
+		return {"ok": false}
+
+	if t_ms < float(_pf_rot_chain[0]["t0"]):
+		return {"ok": false}
+
+	var angle := 0.0
+	var seg: Dictionary = {}
+
+	for s in _pf_rot_chain:
+		var t0 := float(s["t0"])
+		var t1 := float(s["t1"])
+
+		if t_ms < t0:
+			# We haven't reached this segment yet; stop here.
+			break
+
+		if t_ms <= t1:
+			# Inside this segment → interpolate
+			var pr := _progress(t_ms, t0, t1)
+			var eased := _ease_eval(String(s["ease"]), pr)
+			angle = lerp(float(s["a0"]), float(s["a1"]), eased)
+			seg = s
+			return {"ok": true, "angle": angle, "seg": seg}
+		else:
+			# Past this segment → remember its final angle
+			angle = float(s["a1"])
+			seg = s
+
+	# If we got here, we're past the last segment; stick to its final angle
+	return {"ok": true, "angle": angle, "seg": seg}
+
+func _eval_pf_scale_at(t_ms: float) -> float:
+	# No scale rows → neutral multiplier
+	if _pf_scale_rows.is_empty():
+		return 1.0
+
+	# Before first segment → neutral
+	if t_ms <= float(_pf_scale_rows[0]["t0"]):
+		return 1.0
+
+	var last_s: float = 1.0
+
+	for sr in _pf_scale_rows:
+		var t0 := float(sr["t0"])
+		var t1 := float(sr["t1"])
+		if t_ms < t0:
+			return last_s
+		elif t_ms <= t1:
+			var pr := _progress(t_ms, t0, t1)
+			var ez := _ease_eval(String(sr["ease"]), pr)
+			var s0 := float(sr["s0"])
+			var s1 := float(sr["s1"])
+			return lerp(s0, s1, ez)
+		else:
+			# Remember most recent end multiplier
+			last_s = float(sr["s1"])
+
+	return last_s
 
 
 # ─────────────────────────────────────────────
@@ -1844,6 +1938,38 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 
 		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
 
+func _apply_trail_width(tr: Node, S: Dictionary) -> void:
+	if tr == null or not tr.is_inside_tree():
+		return
+	if not tr.has_method("get"):
+		return
+
+	# Trails usually expose their Line2D via a "line" property.
+	var line_obj = tr.get("line")
+	if line_obj == null or not (line_obj is Line2D):
+		return
+
+	var line := line_obj as Line2D
+
+	# Cache the base width once so we always scale from original.
+	if not tr.has_meta("_vfx_trail_base_width"):
+		tr.set_meta("_vfx_trail_base_width", line.width)
+
+	var base_width: float = float(tr.get_meta("_vfx_trail_base_width"))
+	if base_width <= 0.0:
+		return
+
+	# Scale comes from the TARGET scale channel.
+	var target_scale: float = 1.0
+	if S.has("target"):
+		target_scale = float(S["target"])
+
+	var clamped_scale: float = clamp(target_scale, 0.6, 1.6)
+	var new_width: float = base_width * clamped_scale
+
+	if abs(line.width - new_width) > 0.01:
+		line.width = new_width
+
 
 
 func _update_trail_drawers(t_ms: int) -> void:
@@ -1897,7 +2023,7 @@ func _update_trail_drawers(t_ms: int) -> void:
 		}
 
 		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
-
+		_apply_trail_width(d, S)
 
 
 
@@ -2331,6 +2457,10 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_pf_rot_rows.clear()
 	_pf_rot_chain.clear()
 	_pf_game_layer = null
+
+	# NEW: playfield scale
+	_pf_scale_rows.clear()
+	_pf_baseline_scale = 1.0
 
 
 	# Mirai lines (runtime)
