@@ -21,6 +21,9 @@ const PF_ROTATE_TAG := "$PF_ROTATE_SEL"
 const PF_USE_ABSOLUTE_CHAIN := true
 const PF_SCALE_TAG := "$PF_SCALE_SEL" # NEW
 
+const FIELD_PIVOT_GL := Vector2(960.0, 540.0) # GameLayer-local pivot for zoom/rot
+
+
 var anim_bank := PHVFXAnimBank.new()
 var _bank_loaded := false
 var _note_shader: Shader = null
@@ -47,15 +50,17 @@ var _pf_rows: Array = []                # [{t0, t1, endpoint: Vector2, ease: Str
 var _pf_chain: Array = []               # [{t0, t1, base: Vector2, end: Vector2, ease}]
 var _pf_wrapper: Node2D = null          # runtime wrapper around GameLayer
 var _pf_baseline_pos: Vector2 = Vector2.ZERO
+var _pf_last_gl_scale: float = 1.0  # last applied GameLayer scale
+
 
 # NEW: rotation rows for playfield
 var _pf_rot_rows: Array = []            # raw rotation rows
 var _pf_rot_chain: Array = []           # [{t0,t1,a0,a1,ease,pivot_parent}]
 var _pf_game_layer: Node2D = null       # GameLayer reference for pivot conversion
 
-# NEW: scale rows for playfield
-var _pf_scale_rows: Array = []          # NEW: [{t0,t1,s0,s1,ease}]
-var _pf_baseline_scale: float = 1.0     # NEW: wrapper’s baseline uniform scale
+var _pf_scale_rows: Array = []          # [{t0,t1,s0,s1,ease}]
+var _pf_baseline_scale: float = 1.0     # wrapper baseline (slides only / legacy)
+var _pf_baseline_gl_scale: float = 1.0  # NEW: GameLayer baseline scale for zoom
 
 # Extra: trail drawers under GameLayer/LAYER_Trails
 var _trail_drawers: Array[Node] = []
@@ -451,6 +456,9 @@ func _ensure_bank_loaded() -> void:
 	# NEW: reset playfield scale for this chart
 	_pf_scale_rows.clear()
 	_pf_baseline_scale = 1.0
+	_pf_baseline_gl_scale = 1.0
+	_pf_last_gl_scale = 1.0
+
 
 	# Mirai rows will be (re)loaded lazily
 	_mirai_rows_loaded = false
@@ -1506,7 +1514,6 @@ func _ensure_playfield_rows_loaded() -> void:
 				"ease": ease,
 			})
 
-		# ---- Rotations (pivot in same space as slide endpoints) ----
 		elif layer_name == PF_ROTATE_TAG:
 			var rt0 := float(e.get("pf_rot_start_time", 0.0))
 			var rt1 := float(e.get("pf_rot_end_time", 0.0))
@@ -1517,13 +1524,13 @@ func _ensure_playfield_rows_loaded() -> void:
 			var a1 := float(e.get("pf_rot_angle_end_deg", 0.0))
 			var rease := String(e.get("pf_rot_ease", "linear"))
 
-			# NOTE: this is in parent-of-GameLayer space
+			# This is stored as GameLayer-local (same as the editor tool)
 			var pv_val = e.get("pf_rot_pivot_local", null)
-			var pivot_parent := Vector2.ZERO
+			var pivot_gl := Vector2.ZERO
 			if typeof(pv_val) == TYPE_ARRAY:
 				var parr: Array = pv_val
 				if parr.size() >= 2:
-					pivot_parent = Vector2(float(parr[0]), float(parr[1]))
+					pivot_gl = Vector2(float(parr[0]), float(parr[1]))
 
 			_pf_rot_rows.append({
 				"t0": rt0,
@@ -1531,7 +1538,7 @@ func _ensure_playfield_rows_loaded() -> void:
 				"a0": a0,
 				"a1": a1,
 				"ease": rease,
-				"pivot_parent": pivot_parent,
+				"pivot_gl": pivot_gl,
 			})
 
 		# ---- Scale (uniform wrapper scale multiplier) ----
@@ -1617,16 +1624,39 @@ func _build_pf_rot_chain() -> void:
 	_pf_rot_chain.clear()
 	if _pf_rot_rows.is_empty():
 		return
+	if _pf_wrapper == null or not _pf_wrapper.is_inside_tree():
+		return
+	if _pf_game_layer == null or not _pf_game_layer.is_inside_tree():
+		return
+
+	var parent2d := _pf_wrapper.get_parent() as Node2D
+	if parent2d == null:
+		return
 
 	for r in _pf_rot_rows:
-		_pf_rot_chain.append(r.duplicate())
+		var t0 := float(r["t0"])
+		var t1 := float(r["t1"])
+		var a0 := float(r["a0"])
+		var a1 := float(r["a1"])
+		var ease := String(r["ease"])
+		var pivot_gl: Vector2 = r.get("pivot_gl", Vector2.ZERO)
+
+		# Same conversion as PlayfieldSlidesManager._build_chain_rot_pt:
+		# GameLayer-local → wrapper-parent space
+		var pivot_parent := parent2d.to_local(_pf_game_layer.to_global(pivot_gl))
+
+		_pf_rot_chain.append({
+			"t0": t0,
+			"t1": t1,
+			"a0": a0,
+			"a1": a1,
+			"ease": ease,
+			"pivot_parent": pivot_parent,
+		})
 
 	_pf_rot_chain.sort_custom(func(a, b):
 		return float(a["t0"]) < float(b["t0"])
 	)
-
-	print("%s: PF rot chain built → rows:%d  segments:%d"
-		% [LOG_NAME, _pf_rot_rows.size(), _pf_rot_chain.size()])
 
 
 func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
@@ -1659,8 +1689,8 @@ func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 	var existing: Node = parent.get_node_or_null("PH_PlayfieldWrapper_RUNTIME")
 	if existing is Node2D and (existing as Node2D).is_ancestor_of(game_layer):
 		_pf_wrapper = existing as Node2D
-		_pf_baseline_pos = _pf_wrapper.position
 		_pf_game_layer = game_layer
+		_pf_baseline_pos = _pf_wrapper.position
 	else:
 		# Create wrapper and reparent GameLayer into it
 		var wrapper := Node2D.new()
@@ -1674,16 +1704,25 @@ func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 		game_layer.set_global_position(gp)
 
 		_pf_wrapper = wrapper
-		_pf_baseline_pos = _pf_wrapper.position
 		_pf_game_layer = game_layer
+		_pf_baseline_pos = _pf_wrapper.position
 
-	# NEW: capture baseline uniform scale (fallback to 1.0)
+	# Wrapper baseline scale (kept for slides, but we won't zoom via wrapper anymore)
 	if _pf_wrapper != null:
 		var sc: Vector2 = _pf_wrapper.scale
 		_pf_baseline_scale = (sc.x if sc.x != 0.0 else 1.0)
 
+	# GameLayer baseline scale (this is what we actually zoom)
+	if _pf_game_layer != null:
+		var gl_sc: Vector2 = _pf_game_layer.scale
+		_pf_baseline_gl_scale = (gl_sc.x if gl_sc.x != 0.0 else 1.0)
+		_pf_last_gl_scale = _pf_baseline_gl_scale
+
+
 	_build_pf_chain()
 	_build_pf_rot_chain()
+
+
 
 
 func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
@@ -1703,12 +1742,13 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 	if _pf_rot_chain.is_empty() and not _pf_rot_rows.is_empty():
 		_build_pf_rot_chain()
 
+		# Slides: evaluate wrapper base position (no rotation yet)
 	var t := float(t_ms)
 
-	# Slides: evaluate wrapper base position (no rotation yet)
+	# Slides: wrapper base position (no rot yet)
 	var pos := _eval_pf_pos(t)
 
-	# Rotation: single global angle + pivot, same semantics as editor
+	# Rotation: wrapper rotation around its pivot (same semantics as before)
 	var angle_now_deg := 0.0
 	if not _pf_rot_chain.is_empty():
 		var rot_res := _eval_pf_rot_at(t)
@@ -1718,17 +1758,38 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 			var pv: Vector2 = seg.get("pivot_parent", Vector2.ZERO)
 			pos = pv + (pos - pv).rotated(deg_to_rad(angle_now_deg))
 
-	# --- NEW: Field scale (wrapper) ---
-	var sfac := _eval_pf_scale_at(t)
-	var target_scale := _pf_baseline_scale * sfac
-
-	# Commit transform to wrapper
+	# Commit slides + rotation to the wrapper
 	if _pf_wrapper.position != pos:
 		_pf_wrapper.position = pos
 	if abs(_pf_wrapper.rotation_degrees - angle_now_deg) > 0.001:
 		_pf_wrapper.rotation_degrees = angle_now_deg
-	if abs(_pf_wrapper.scale.x - target_scale) > 0.001 or abs(_pf_wrapper.scale.y - target_scale) > 0.001:
-		_pf_wrapper.scale = Vector2(target_scale, target_scale)
+
+	# --- Zoom the GameLayer around a fixed GameLayer-local pivot (960,540) ---
+	if _pf_game_layer != null and _pf_game_layer.is_inside_tree():
+		var sfac := _eval_pf_scale_at(t)
+		var target_scale := _pf_baseline_gl_scale * sfac
+
+		# Optional safety clamp if JSON ever has wild values
+		# target_scale = clamp(target_scale, _pf_baseline_gl_scale * 0.5, _pf_baseline_gl_scale * 2.0)
+
+		# Only do work if scale actually changed since last frame
+		if abs(target_scale - _pf_last_gl_scale) > 0.0001:
+			var pivot_local := FIELD_PIVOT_GL  # or Vector2.ZERO if your field is centered at (0,0)
+
+			# 1) World position of pivot at current scale/position
+			var pivot_world_before := _pf_game_layer.to_global(pivot_local)
+
+			# 2) Apply new scale
+			_pf_game_layer.scale = Vector2(target_scale, target_scale)
+
+			# 3) Where did that pivot move to after scaling?
+			var pivot_world_after := _pf_game_layer.to_global(pivot_local)
+
+			# 4) Shift GameLayer so that the pivot stays fixed in world space
+			_pf_game_layer.position += (pivot_world_before - pivot_world_after)
+
+			_pf_last_gl_scale = target_scale
+
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
 	if t1 <= t0:
@@ -2461,6 +2522,10 @@ func _preprocess_timing_points(points: Array) -> Array:
 	# NEW: playfield scale
 	_pf_scale_rows.clear()
 	_pf_baseline_scale = 1.0
+	_pf_baseline_gl_scale = 1.0
+	_pf_last_gl_scale = 1.0
+
+
 
 
 	# Mirai lines (runtime)
