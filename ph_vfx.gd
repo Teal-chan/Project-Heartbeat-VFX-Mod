@@ -2424,30 +2424,50 @@ func _apply_parts_all(
 # ─────────────────────────────────────────────
 
 func _mark_adjacent_notes(points: Array) -> void:
-	var heads: Array = []
+	# Map time -> Array[HBNoteData]
+	var time_to_notes := {}
 
 	for p in points:
 		if p is HBNoteData:
-			var nd = p
+			var nd := p as HBNoteData
+			var t := nd.time
+
+			if not time_to_notes.has(t):
+				time_to_notes[t] = []
+
+			time_to_notes[t].append(nd)
+
+			# Clear any previous adjacency factor just in case
+			if (nd as Object).has_method("has_meta") and nd.has_meta("phvfx_adj_factor"):
+				nd.set_meta("phvfx_adj_factor", 1.0)
+
+	# Build a "heads" list, but ONLY for times that are true singles (no chords)
+	var heads: Array = []
+
+	for t in time_to_notes.keys():
+		var arr: Array = time_to_notes[t]
+		if arr.size() == 1:
 			heads.append({
-				"note": nd,
-				"time": nd.time
+				"note": arr[0],
+				"time": t
 			})
 
+	# If we have fewer than 2 single notes, nothing to do
 	if heads.size() < 2:
 		return
 
+	# Sort by time (ascending)
 	heads.sort_custom(func(a, b):
 		return int(a["time"]) < int(b["time"])
 	)
 
-	var threshold := 90
+	var threshold := 90  # ms
 	var current_group: Array = []
 	var last_time = null
 
 	for i in range(heads.size()):
 		var h = heads[i]
-		var t = int(h["time"])
+		var t := int(h["time"])
 
 		if last_time == null:
 			current_group.clear()
@@ -2462,7 +2482,9 @@ func _mark_adjacent_notes(points: Array) -> void:
 
 		last_time = t
 
+	# Flush final group
 	_apply_adjacent_group(current_group)
+
 
 
 func _apply_adjacent_group(group: Array) -> void:
