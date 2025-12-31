@@ -1629,9 +1629,11 @@ func _build_pf_rot_chain() -> void:
 	if _pf_game_layer == null or not _pf_game_layer.is_inside_tree():
 		return
 
-	var parent2d := _pf_wrapper.get_parent() as Node2D
-	if parent2d == null:
-		return
+	var parent := _pf_wrapper.get_parent()
+	var parent_ci := parent as CanvasItem
+	var parent_xf: Transform2D = Transform2D.IDENTITY
+	if parent_ci != null:
+		parent_xf = parent_ci.get_global_transform_with_canvas()
 
 	for r in _pf_rot_rows:
 		var t0 := float(r["t0"])
@@ -1641,9 +1643,9 @@ func _build_pf_rot_chain() -> void:
 		var ease := String(r["ease"])
 		var pivot_gl: Vector2 = r.get("pivot_gl", Vector2.ZERO)
 
-		# Same conversion as PlayfieldSlidesManager._build_chain_rot_pt:
-		# GameLayer-local → wrapper-parent space
-		var pivot_parent := parent2d.to_local(_pf_game_layer.to_global(pivot_gl))
+		# GameLayer-local → world → wrapper-parent space
+		var pivot_world: Vector2 = _pf_game_layer.get_global_transform_with_canvas() * pivot_gl
+		var pivot_parent: Vector2 = parent_xf.affine_inverse() * pivot_world
 
 		_pf_rot_chain.append({
 			"t0": t0,
@@ -1657,6 +1659,7 @@ func _build_pf_rot_chain() -> void:
 	_pf_rot_chain.sort_custom(func(a, b):
 		return float(a["t0"]) < float(b["t0"])
 	)
+
 
 
 func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
