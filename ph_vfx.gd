@@ -1772,26 +1772,33 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 		var sfac := _eval_pf_scale_at(t)
 		var target_scale := _pf_baseline_gl_scale * sfac
 
-		# Optional safety clamp if JSON ever has wild values
-		# target_scale = clamp(target_scale, _pf_baseline_gl_scale * 0.5, _pf_baseline_gl_scale * 2.0)
-
 		# Only do work if scale actually changed since last frame
 		if abs(target_scale - _pf_last_gl_scale) > 0.0001:
-			var pivot_local := FIELD_PIVOT_GL  # or Vector2.ZERO if your field is centered at (0,0)
+			var pivot_local := FIELD_PIVOT_GL
 
 			# 1) World position of pivot at current scale/position
-			var pivot_world_before := _pf_game_layer.to_global(pivot_local)
+			var pivot_world_before: Vector2 = _pf_game_layer.to_global(pivot_local)
 
 			# 2) Apply new scale
 			_pf_game_layer.scale = Vector2(target_scale, target_scale)
 
-			# 3) Where did that pivot move to after scaling?
-			var pivot_world_after := _pf_game_layer.to_global(pivot_local)
+			# 3) World position of pivot after scaling
+			var pivot_world_after: Vector2 = _pf_game_layer.to_global(pivot_local)
 
-			# 4) Shift GameLayer so that the pivot stays fixed in world space
-			_pf_game_layer.position += (pivot_world_before - pivot_world_after)
+			# 4) Convert the world-space delta into the parent's local space,
+			#    so rotation on the wrapper doesn't break the adjustment.
+			var parent2d := _pf_game_layer.get_parent() as Node2D
+			if parent2d != null and parent2d.is_inside_tree():
+				var before_local: Vector2 = parent2d.to_local(pivot_world_before)
+				var after_local: Vector2  = parent2d.to_local(pivot_world_after)
+				var delta_local: Vector2  = before_local - after_local
+				_pf_game_layer.position += delta_local
+			else:
+				# Fallback if, for some reason, there is no Node2D parent
+				_pf_game_layer.position += (pivot_world_before - pivot_world_after)
 
 			_pf_last_gl_scale = target_scale
+
 
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
