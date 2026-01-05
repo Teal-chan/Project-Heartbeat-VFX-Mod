@@ -1,3 +1,14 @@
+
+<img width="189" height="208" alt="scale" src="https://github.com/user-attachments/assets/629e8d95-0b73-4d3b-a8ec-a1533977b883" />
+<img width="165" height="201" alt="color" src="https://github.com/user-attachments/assets/c738a7fa-f767-416a-80e3-c31c74a2280f" />
+<img width="231" height="249" alt="rotation" src="https://github.com/user-attachments/assets/6ecd2711-e891-4858-aa15-5021399affcf" />
+<img width="212" height="313" alt="offset" src="https://github.com/user-attachments/assets/e5205a1a-0903-45dc-9b8a-46ccf62df6ff" />
+<img width="245" height="280" alt="glow" src="https://github.com/user-attachments/assets/ae5a4050-0a62-4a96-a124-fd02f7bc81b9" />
+<img width="542" height="337" alt="spotlight" src="https://github.com/user-attachments/assets/99208c28-dfc3-49ca-9dde-d12822d3ce10" />
+<img width="252" height="200" alt="field slide" src="https://github.com/user-attachments/assets/30abee88-1c35-4fd0-9cc0-31f3442e5d56" />
+<img width="314" height="264" alt="field rotation" src="https://github.com/user-attachments/assets/826e6f9d-ffee-4616-b53e-a4c54c3b5c30" />
+<img width="358" height="311" alt="field scale" src="https://github.com/user-attachments/assets/194d37e7-e777-418a-a1a3-4f80330fa5ba" />
+
 <img width="839" height="475" alt="Screenshot 2025-11-03 095214" src="https://github.com/user-attachments/assets/72143b95-d6b1-4c92-a137-720ff5631873" />
 
 # Project-Heartbeat-VFX-Mod
