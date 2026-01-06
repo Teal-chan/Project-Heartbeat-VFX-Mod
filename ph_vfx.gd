@@ -62,12 +62,7 @@ var _pf_scale_rows: Array = []          # [{t0,t1,s0,s1,ease}]
 var _pf_baseline_scale: float = 1.0     # wrapper baseline (slides only / legacy)
 var _pf_baseline_gl_scale: float = 1.0  # NEW: GameLayer baseline scale for zoom
 
-# Extra: trail drawers under GameLayer/LAYER_Trails
-var _trail_drawers: Array[Node] = []
-
-# Runtime time tracking so we can tick even when there are no drawers
-var _rt_last_chart_ms: float = -1.0
-var _rt_last_wall_ms: int = -1
+# Add these new member variables near the other _pf_ variables (around line 70-80):
 
 # ─── JudgementLabel support (runtime) ───
 var _jl_wrapper: Node2D = null
@@ -76,6 +71,44 @@ var _jl_baseline_wrapper_pos: Vector2 = Vector2.ZERO
 var _jl_baseline_label_pos: Vector2 = Vector2.ZERO
 var _jl_original_parent: Node = null
 var _jl_original_index: int = -1
+
+# Extra: trail drawers under GameLayer/LAYER_Trails
+var _trail_drawers: Array[Node] = []
+
+# Runtime time tracking so we can tick even when there are no drawers
+var _rt_last_chart_ms: float = -1.0
+var _rt_last_wall_ms: int = -1
+
+# Spotlight overlay (full-screen)
+var _spot_overlay = null            # ColorRect
+var _spot_shader: Shader = null
+# Drawers that should have a spotlight following them
+var _spot_drawers: Array = []
+
+# Per-frame sampling cache (key -> {S,C,R,O,G} at a given time)
+var _frame_sample_time_ms: int = -1
+var _frame_sample_cache: Dictionary = {}  # key -> { "S":..., "C":..., "R":..., "O":..., "G":... }
+
+# Mirai link lines (runtime)
+const MIRAI_LINE_NODE_NAME := "PH_MiraiLinkLines_RUNTIME"
+
+# each entry:
+# {
+#   head_key: String,
+#   tail_key: String,
+#   head_time: int,
+#   tail_time: int,
+#   head_drawer: Node,
+#   tail_drawer: Node,
+#   line: Line2D
+# }
+var _mirai_links: Array = []
+var _mirai_line_root: Node2D = null
+var _mirai_rows_loaded := false
+var _mirai_last_t_ms: int = 0   # last known song time in ms (for Mirai lifetime)
+
+func _init() -> void:
+	processing_notes = true
 
 # ─────────────────────────────────────────────────────────────
 # JudgementLabel wrapper (runtime)
@@ -251,38 +284,6 @@ func _update_judgement_label(t_ms: float) -> void:
 	else:
 		_jl_wrapper.rotation_degrees = 0.0
 		_jl_wrapper.position = final_pos
-
-# Spotlight overlay (full-screen)
-var _spot_overlay = null            # ColorRect
-var _spot_shader: Shader = null
-# Drawers that should have a spotlight following them
-var _spot_drawers: Array = []
-
-# Per-frame sampling cache (key -> {S,C,R,O,G} at a given time)
-var _frame_sample_time_ms: int = -1
-var _frame_sample_cache: Dictionary = {}  # key -> { "S":..., "C":..., "R":..., "O":..., "G":... }
-
-# Mirai link lines (runtime)
-const MIRAI_LINE_NODE_NAME := "PH_MiraiLinkLines_RUNTIME"
-
-# each entry:
-# {
-#   head_key: String,
-#   tail_key: String,
-#   head_time: int,
-#   tail_time: int,
-#   head_drawer: Node,
-#   tail_drawer: Node,
-#   line: Line2D
-# }
-var _mirai_links: Array = []
-var _mirai_line_root: Node2D = null
-var _mirai_rows_loaded := false
-var _mirai_last_t_ms: int = 0   # last known song time in ms (for Mirai lifetime)
-
-func _init() -> void:
-	processing_notes = true
-
 
 # ─────────────────────────────────────────────
 # Metadata
@@ -1979,14 +1980,11 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 			else:
 				# Fallback if, for some reason, there is no Node2D parent
 				_pf_game_layer.position += (pivot_world_before - pivot_world_after)
-				
-			# ─── JudgementLabel ───
-			if _jl_wrapper == null or not _jl_wrapper.is_inside_tree():
-				_ensure_judgement_label_wrapper(any_drawer)
-			_update_judgement_label(float(t_ms))
 
 			_pf_last_gl_scale = target_scale
-
+		if _jl_wrapper == null or not _jl_wrapper.is_inside_tree():
+			_ensure_judgement_label_wrapper(any_drawer)
+		_update_judgement_label(float(t_ms))
 
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
@@ -2745,6 +2743,7 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_pf_baseline_gl_scale = 1.0
 	_pf_last_gl_scale = 1.0
 
+	# Add with the other playfield resets:
 	# JudgementLabel (runtime)
 	if _jl_wrapper != null and is_instance_valid(_jl_wrapper):
 		_unwrap_judgement_label()
@@ -2754,8 +2753,6 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_jl_baseline_label_pos = Vector2.ZERO
 	_jl_original_parent = null
 	_jl_original_index = -1
-
-
 
 
 	# Mirai lines (runtime)
