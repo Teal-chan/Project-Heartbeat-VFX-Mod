@@ -61,6 +61,7 @@ var _pf_game_layer: Node2D = null       # GameLayer reference for pivot conversi
 var _pf_scale_rows: Array = []          # [{t0,t1,s0,s1,ease}]
 var _pf_baseline_scale: float = 1.0     # wrapper baseline (slides only / legacy)
 var _pf_baseline_gl_scale: float = 1.0  # NEW: GameLayer baseline scale for zoom
+var _pf_baseline_game_layer_pos: Vector2 = Vector2.ZERO
 
 # Add these new member variables near the other _pf_ variables (around line 70-80):
 
@@ -1682,6 +1683,13 @@ func _ensure_playfield_rows_loaded() -> void:
 			if t1 <= t0:
 				continue
 
+			var startpoint = null  # null means "chain from previous"
+			var sp_val = e.get("pf_slide_startpoint", null)
+			if typeof(sp_val) == TYPE_ARRAY:
+				var sarr: Array = sp_val
+				if sarr.size() >= 2:
+					startpoint = Vector2(float(sarr[0]), float(sarr[1]))
+
 			var ep_val = e.get("pf_slide_endpoint", null)
 			var endpoint := Vector2.ZERO
 			if typeof(ep_val) == TYPE_ARRAY:
@@ -1694,6 +1702,7 @@ func _ensure_playfield_rows_loaded() -> void:
 			_pf_rows.append({
 				"t0": t0,
 				"t1": t1,
+				"startpoint": startpoint,
 				"endpoint": endpoint,
 				"ease": ease,
 			})
@@ -1769,30 +1778,75 @@ func _ensure_playfield_rows_loaded() -> void:
 		for sr2 in _pf_scale_rows:     # NEW
 			sr2["t0"] = float(sr2["t0"]) * 1000.0
 			sr2["t1"] = float(sr2["t1"]) * 1000.0
+	
+	# Sort all rows by start time
+	_pf_rows.sort_custom(func(a, b):
+		return float(a["t0"]) < float(b["t0"])
+	)
+	_pf_rot_rows.sort_custom(func(a, b):
+		return float(a["t0"]) < float(b["t0"])
+	)
+	_pf_scale_rows.sort_custom(func(a, b):
+		return float(a["t0"]) < float(b["t0"])
+	)
 
 	print("%s: PF rows loaded → slides:%d  rotates:%d  scales:%d  from:%s"
 		% [LOG_NAME, _pf_rows.size(), _pf_rot_rows.size(), _pf_scale_rows.size(), _current_vfx_path])
-
-
 
 func _build_pf_chain() -> void:
 	_pf_chain.clear()
 	if _pf_rows.is_empty():
 		return
+	if _pf_wrapper == null or _pf_game_layer == null:
+		return
+
+	# Sort rows by start time
+	_pf_rows.sort_custom(func(a, b):
+		return float(a["t0"]) < float(b["t0"])
+	)
+
+	var parent2d := _pf_wrapper.get_parent() as Node2D
+	if parent2d == null:
+		parent2d = _pf_wrapper
 
 	var prev_end: Vector2 = _pf_baseline_pos
 
 	for r in _pf_rows:
 		var t0 := float(r["t0"])
 		var t1 := float(r["t1"])
-		var base_pos := prev_end
-		var end_pos := Vector2.ZERO
-		var endpoint: Vector2 = r["endpoint"]
-
-		if PF_USE_ABSOLUTE_CHAIN:
-			end_pos = endpoint
+		
+		# Get startpoint (GameLayer-local coordinates)
+		var sp_gl: Vector2 = Vector2.ZERO
+		var has_startpoint := false
+		var sp = r.get("startpoint", null)
+		if sp != null and typeof(sp) == TYPE_VECTOR2:
+			sp_gl = sp
+			has_startpoint = true
+		
+		# Get endpoint (GameLayer-local coordinates)
+		var ep_gl: Vector2 = r["endpoint"]
+		
+		# Convert from GameLayer-local to wrapper-parent space
+		var base_pos: Vector2
+		if has_startpoint:
+			# Convert startpoint to parent space
+			if parent2d == _pf_wrapper:
+				var sp_global := _pf_game_layer.to_global(sp_gl)
+				var sp_wrapper_local := _pf_wrapper.to_local(sp_global)
+				base_pos = _pf_baseline_pos + sp_wrapper_local
+			else:
+				base_pos = parent2d.to_local(_pf_game_layer.to_global(sp_gl))
 		else:
-			end_pos = base_pos + endpoint
+			base_pos = prev_end
+		
+		# Convert endpoint to parent space
+		var end_pos: Vector2
+		if parent2d == _pf_wrapper:
+			var ep_global := _pf_game_layer.to_global(ep_gl)
+			var ep_wrapper_local := _pf_wrapper.to_local(ep_global)
+			end_pos = _pf_baseline_pos + ep_wrapper_local
+		else:
+			end_pos = parent2d.to_local(_pf_game_layer.to_global(ep_gl))
 
 		_pf_chain.append({
 			"t0": t0,
@@ -1904,7 +1958,7 @@ func _ensure_playfield_wrapper_from_drawer(any_drawer: Node) -> void:
 		var gl_sc: Vector2 = _pf_game_layer.scale
 		_pf_baseline_gl_scale = (gl_sc.x if gl_sc.x != 0.0 else 1.0)
 		_pf_last_gl_scale = _pf_baseline_gl_scale
-
+		_pf_baseline_game_layer_pos = _pf_game_layer.position  # ADD THIS LINE
 
 	_build_pf_chain()
 	_build_pf_rot_chain()
@@ -1950,41 +2004,50 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 		_pf_wrapper.position = pos
 	if abs(_pf_wrapper.rotation_degrees - angle_now_deg) > 0.001:
 		_pf_wrapper.rotation_degrees = angle_now_deg
-
+		
+	# Debug: print every 60 frames or so
+	if Engine.get_process_frames() % 60 == 0:
+		print("[MM Scale Debug] t=%.0f sfac=%.3f baseline_gl_pos=%s gl.pos=%s gl.scale=%s wrapper.pos=%s" % [
+			t,
+			_eval_pf_scale_at(t),
+			str(_pf_baseline_game_layer_pos),
+			str(_pf_game_layer.position) if _pf_game_layer else "null",
+			str(_pf_game_layer.scale) if _pf_game_layer else "null",
+			str(_pf_wrapper.position) if _pf_wrapper else "null"
+		])
+		
 	# --- Zoom the GameLayer around a fixed GameLayer-local pivot (960,540) ---
 	if _pf_game_layer != null and _pf_game_layer.is_inside_tree():
 		var sfac := _eval_pf_scale_at(t)
 		var target_scale := _pf_baseline_gl_scale * sfac
+		var pivot_local := FIELD_PIVOT_GL
+		
+		# Reset GameLayer to baseline position and scale
+		_pf_game_layer.position = _pf_baseline_game_layer_pos
+		_pf_game_layer.scale = Vector2(_pf_baseline_gl_scale, _pf_baseline_gl_scale)
+		
+		# Get pivot world position at baseline
+		var pivot_world_baseline: Vector2 = _pf_game_layer.to_global(pivot_local)
+		
+		# Apply target scale
+		_pf_game_layer.scale = Vector2(target_scale, target_scale)
+		
+		# Get pivot world position at target scale
+		var pivot_world_scaled: Vector2 = _pf_game_layer.to_global(pivot_local)
+		
+		# Compensate position to keep pivot stationary
+		var parent2d := _pf_game_layer.get_parent() as Node2D
+		if parent2d != null and parent2d.is_inside_tree():
+			var baseline_local: Vector2 = parent2d.to_local(pivot_world_baseline)
+			var scaled_local: Vector2 = parent2d.to_local(pivot_world_scaled)
+			_pf_game_layer.position += baseline_local - scaled_local
+		
+		_pf_last_gl_scale = target_scale
 
-		# Only do work if scale actually changed since last frame
-		if abs(target_scale - _pf_last_gl_scale) > 0.0001:
-			var pivot_local := FIELD_PIVOT_GL
-
-			# 1) World position of pivot at current scale/position
-			var pivot_world_before: Vector2 = _pf_game_layer.to_global(pivot_local)
-
-			# 2) Apply new scale
-			_pf_game_layer.scale = Vector2(target_scale, target_scale)
-
-			# 3) World position of pivot after scaling
-			var pivot_world_after: Vector2 = _pf_game_layer.to_global(pivot_local)
-
-			# 4) Convert the world-space delta into the parent's local space,
-			#    so rotation on the wrapper doesn't break the adjustment.
-			var parent2d := _pf_game_layer.get_parent() as Node2D
-			if parent2d != null and parent2d.is_inside_tree():
-				var before_local: Vector2 = parent2d.to_local(pivot_world_before)
-				var after_local: Vector2  = parent2d.to_local(pivot_world_after)
-				var delta_local: Vector2  = before_local - after_local
-				_pf_game_layer.position += delta_local
-			else:
-				# Fallback if, for some reason, there is no Node2D parent
-				_pf_game_layer.position += (pivot_world_before - pivot_world_after)
-
-			_pf_last_gl_scale = target_scale
-		if _jl_wrapper == null or not _jl_wrapper.is_inside_tree():
-			_ensure_judgement_label_wrapper(any_drawer)
-		_update_judgement_label(float(t_ms))
+	# JudgementLabel update (outside the scale block)
+	if _jl_wrapper == null or not _jl_wrapper.is_inside_tree():
+		_ensure_judgement_label_wrapper(any_drawer)
+	_update_judgement_label(float(t_ms))
 
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
@@ -2742,6 +2805,7 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_pf_baseline_scale = 1.0
 	_pf_baseline_gl_scale = 1.0
 	_pf_last_gl_scale = 1.0
+	_pf_baseline_game_layer_pos = Vector2.ZERO 
 
 	# Add with the other playfield resets:
 	# JudgementLabel (runtime)
