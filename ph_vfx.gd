@@ -272,15 +272,19 @@ func _update_judgement_label(t_ms: float) -> void:
 	# Wrapper position = slide offset + scale compensation
 	var final_pos := jl_slide_offset + scale_compensation
 	
-	# 3) Rotation around FIELD_PIVOT_GL
+	# 3) Rotation around the authored pivot (not hardcoded center)
 	var rot_res := _eval_pf_rot_at(t_ms)
 	if rot_res.get("ok", false):
 		var angle_deg := float(rot_res["angle"])
 		_jl_wrapper.rotation_degrees = angle_deg
 		
-		# Rotate wrapper position around the pivot
-		var rel := final_pos - scale_pivot
-		var rotated_pos := scale_pivot + rel.rotated(deg_to_rad(angle_deg))
+		# Get the rotation pivot from the segment (authored in UI)
+		var seg: Dictionary = rot_res.get("seg", {})
+		var rot_pivot: Vector2 = seg.get("pivot_parent", FIELD_PIVOT_GL)
+		
+		# Rotate wrapper position around the authored pivot
+		var rel := final_pos - rot_pivot
+		var rotated_pos := rot_pivot + rel.rotated(deg_to_rad(angle_deg))
 		_jl_wrapper.position = rotated_pos
 	else:
 		_jl_wrapper.rotation_degrees = 0.0
