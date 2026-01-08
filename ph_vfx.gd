@@ -2005,17 +2005,6 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 	if abs(_pf_wrapper.rotation_degrees - angle_now_deg) > 0.001:
 		_pf_wrapper.rotation_degrees = angle_now_deg
 		
-	# Debug: print every 60 frames or so
-	if Engine.get_process_frames() % 60 == 0:
-		print("[MM Scale Debug] t=%.0f sfac=%.3f baseline_gl_pos=%s gl.pos=%s gl.scale=%s wrapper.pos=%s" % [
-			t,
-			_eval_pf_scale_at(t),
-			str(_pf_baseline_game_layer_pos),
-			str(_pf_game_layer.position) if _pf_game_layer else "null",
-			str(_pf_game_layer.scale) if _pf_game_layer else "null",
-			str(_pf_wrapper.position) if _pf_wrapper else "null"
-		])
-		
 	# --- Zoom the GameLayer around a fixed GameLayer-local pivot (960,540) ---
 	if _pf_game_layer != null and _pf_game_layer.is_inside_tree():
 		var sfac := _eval_pf_scale_at(t)
@@ -2831,4 +2820,13 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_rt_last_wall_ms = -1
 
 	_mark_adjacent_notes(points)
+	
+	# <<< EARLY LOAD: Load VFX data at song start instead of waiting for first note >>>
+	# This ensures field effects (slides, rotation, scale) and spotlights work
+	# even before the first note spawns.
+	_ensure_bank_loaded()
+	_ensure_note_shader()
+	_ensure_playfield_rows_loaded()
+	_ensure_mirai_rows_loaded()
+	
 	return points
