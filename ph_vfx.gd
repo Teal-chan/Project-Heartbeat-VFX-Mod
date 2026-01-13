@@ -246,13 +246,13 @@ func _update_judgement_label(t_ms: float) -> void:
 	if _jl_label == null or not _jl_label.is_inside_tree():
 		return
 	
-	# The scale pivot is the field center (960, 540)
-	var scale_pivot := FIELD_PIVOT_GL
+	# Get the scale pivot for the current time from the active scale row
+	var scale_pivot := _get_pf_scale_pivot_at(t_ms)
 	
 	# 1) Slides - compute offset from field movement
 	var jl_slide_offset := _eval_pf_pos(t_ms) - _pf_baseline_pos
 	
-	# 2) Scale around FIELD_PIVOT_GL
+	# 2) Scale around the pivot
 	var sfac := _eval_pf_scale_at(t_ms)
 	
 	# The JudgementLabel's screen position at baseline (wrapper at origin, label at its original pos)
@@ -1748,6 +1748,12 @@ func _ensure_playfield_rows_loaded() -> void:
 			var s0 := float(e.get("pf_scale_start_mult", 1.0))
 			var s1 := float(e.get("pf_scale_end_mult",   1.0))
 			var sease := String(e.get("pf_scale_ease", "linear"))
+			
+			# Parse pivot (default to field center if not specified)
+			var pivot_gl := FIELD_PIVOT_GL
+			var pv_scale := e.get("pf_scale_pivot_local", null)
+			if typeof(pv_scale) == TYPE_ARRAY and (pv_scale as Array).size() >= 2:
+				pivot_gl = Vector2(float(pv_scale[0]), float(pv_scale[1]))
 
 			_pf_scale_rows.append({
 				"t0": st0,
@@ -1755,6 +1761,7 @@ func _ensure_playfield_rows_loaded() -> void:
 				"s0": s0,
 				"s1": s1,
 				"ease": sease,
+				"pivot_gl": pivot_gl,
 			})
 
 	# ---- seconds vs ms heuristic (slides + rotations + scale) ----
@@ -2013,7 +2020,7 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 	if _pf_game_layer != null and _pf_game_layer.is_inside_tree():
 		var sfac := _eval_pf_scale_at(t)
 		var target_scale := _pf_baseline_gl_scale * sfac
-		var pivot_local := FIELD_PIVOT_GL
+		var pivot_local := _get_pf_scale_pivot_at(t)
 		
 		# Reset GameLayer to baseline position and scale
 		_pf_game_layer.position = _pf_baseline_game_layer_pos
@@ -2155,6 +2162,23 @@ func _eval_pf_scale_at(t_ms: float) -> float:
 			last_s = float(sr["s1"])
 
 	return last_s
+
+func _get_pf_scale_pivot_at(t_ms: float) -> Vector2:
+	"""Returns the pivot point for the active scale segment at the given time."""
+	if _pf_scale_rows.is_empty():
+		return FIELD_PIVOT_GL
+	
+	# Find the active or most recent scale row
+	var active_pivot := FIELD_PIVOT_GL
+	for sr in _pf_scale_rows:
+		var t0 := float(sr["t0"])
+		var t1 := float(sr["t1"])
+		if t_ms >= t0:
+			active_pivot = sr.get("pivot_gl", FIELD_PIVOT_GL)
+		if t_ms >= t0 and t_ms <= t1:
+			return sr.get("pivot_gl", FIELD_PIVOT_GL)
+	
+	return active_pivot
 
 
 # ─────────────────────────────────────────────
