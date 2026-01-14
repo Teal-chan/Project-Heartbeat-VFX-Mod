@@ -526,8 +526,6 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 		if d.has_method("get"):
 			nd = d.get("note_data")
 
-		var adj_factor := _get_adj_factor(nd)
-
 		var key: String = _get_effective_key_for_drawer(d)
 		if key == "":
 			continue
@@ -565,7 +563,7 @@ func _process_note(drawers: Array, time_sec: float, _note_speed: float) -> void:
 			"bar2":   O.bar2 - O.target,
 		}
 
-		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
+		_apply_parts_all(parts, S, C, R, O_rel, G)
 
 	# Slide-chain pieces in LAYER_SlideChainPieces
 	_update_slide_chain_drawers(t_ms)
@@ -2240,7 +2238,6 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 		if d.has_method("get"):
 			nd = d.get("note_data")
 
-		var adj_factor := _get_adj_factor(nd)
 		var key: String = _get_effective_key_for_drawer(d)
 		if key == "":
 			continue
@@ -2273,7 +2270,7 @@ func _update_slide_chain_drawers(t_ms: int) -> void:
 			"bar2":   O.bar2 - O.target,
 		}
 
-		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
+		_apply_parts_all(parts, S, C, R, O_rel, G)
 
 func _apply_trail_width(tr: Node, S: Dictionary) -> void:
 	if tr == null or not tr.is_inside_tree():
@@ -2323,9 +2320,6 @@ func _update_trail_drawers(t_ms: int) -> void:
 		if d.has_method("get"):
 			nd = d.get("note_data")
 
-		# Same adjacency logic as other parts
-		var adj_factor := _get_adj_factor(nd)
-
 		var key: String = _get_effective_key_for_drawer(d)
 		if key == "":
 			continue
@@ -2359,7 +2353,7 @@ func _update_trail_drawers(t_ms: int) -> void:
 			"bar2":   O.bar2 - O.target,
 		}
 
-		_apply_parts_all(parts, S, C, R, O_rel, G, adj_factor)
+		_apply_parts_all(parts, S, C, R, O_rel, G)
 		_apply_trail_width(d, S)
 
 
@@ -2478,7 +2472,7 @@ func _apply_drawer_field_transform(root: Node, R: Dictionary, O: Dictionary, use
 
 
 # ─────────────────────────────────────────────
-# Parts application (scale × adj, color, rot, offset)
+# Parts application (scale, color, rot, offset)
 # ─────────────────────────────────────────────
 
 func _apply_parts_all(
@@ -2487,8 +2481,7 @@ func _apply_parts_all(
 	C: Dictionary,
 	R: Dictionary,
 	O: Dictionary,
-	G: Dictionary,
-	adj_factor: float
+	G: Dictionary
 ) -> void:
 	if p.is_empty():
 		return
@@ -2505,13 +2498,13 @@ func _apply_parts_all(
 	var target_ci: CanvasItem = p.get("target", null)
 	var hold_nodes: Array = p.get("hold_nodes", [])
 
-	# -------- SCALE (with adjacency) --------
-	var head_scale: float = float(S.head) * adj_factor
-	var tail_scale: float = float(S.tail) * adj_factor
-	var target_scale: float = float(S.target) * adj_factor
-	var bar1_scale: float = float(S.bar1) * adj_factor
-	var bar2_scale: float = float(S.bar2) * adj_factor
-	var hold_scale: float = float(S.hold) * adj_factor
+	# -------- SCALE --------
+	var head_scale: float = float(S.head)
+	var tail_scale: float = float(S.tail)
+	var target_scale: float = float(S.target)
+	var bar1_scale: float = float(S.bar1)
+	var bar2_scale: float = float(S.bar2)
+	var hold_scale: float = float(S.hold)
 
 	if head != null and LS["h"] != head_scale:
 		_set_scale(head, head_scale)
@@ -2635,7 +2628,7 @@ func _apply_parts_all(
 					_set_offset(ci_child3, O.bar1)
 					LO["b1"] = O.bar1
 
-	# -------- GLOW (no adjacency scaling – match MegaInjector) --------
+	# -------- GLOW --------
 	var head_glow   : float = float(G.get("head",   0.0))
 	var tail_glow   : float = float(G.get("tail",   0.0))
 	var target_glow : float = float(G.get("target", 0.0))
@@ -2692,100 +2685,6 @@ func _apply_parts_all(
 			if ch is CanvasItem:
 				_commit_transform(ch as CanvasItem)
 
-
-
-
-# ─────────────────────────────────────────────
-# Adjacency: shrink tight note clusters
-# ─────────────────────────────────────────────
-
-func _mark_adjacent_notes(points: Array) -> void:
-	# Map time -> Array[HBNoteData]
-	var time_to_notes := {}
-
-	for p in points:
-		if p is HBNoteData:
-			var nd := p as HBNoteData
-			var t := nd.time
-
-			if not time_to_notes.has(t):
-				time_to_notes[t] = []
-
-			time_to_notes[t].append(nd)
-
-			# Clear any previous adjacency factor just in case
-			if (nd as Object).has_method("has_meta") and nd.has_meta("phvfx_adj_factor"):
-				nd.set_meta("phvfx_adj_factor", 1.0)
-
-	# Build a "heads" list, but ONLY for times that are true singles (no chords)
-	var heads: Array = []
-
-	for t in time_to_notes.keys():
-		var arr: Array = time_to_notes[t]
-		if arr.size() == 1:
-			heads.append({
-				"note": arr[0],
-				"time": t
-			})
-
-	# If we have fewer than 2 single notes, nothing to do
-	if heads.size() < 2:
-		return
-
-	# Sort by time (ascending)
-	heads.sort_custom(func(a, b):
-		return int(a["time"]) < int(b["time"])
-	)
-
-	var threshold := 90  # ms
-	var current_group: Array = []
-	var last_time = null
-
-	for i in range(heads.size()):
-		var h = heads[i]
-		var t := int(h["time"])
-
-		if last_time == null:
-			current_group.clear()
-			current_group.append(h)
-		else:
-			if abs(t - last_time) <= threshold:
-				current_group.append(h)
-			else:
-				_apply_adjacent_group(current_group)
-				current_group.clear()
-				current_group.append(h)
-
-		last_time = t
-
-	# Flush final group
-	_apply_adjacent_group(current_group)
-
-
-
-func _apply_adjacent_group(group: Array) -> void:
-	if group.size() <= 1:
-		return
-
-	var factor := 0.9
-	if group.size() >= 3:
-		factor = 0.85
-
-	for h in group:
-		var nd = h["note"]
-		if nd != null and (nd as Object).has_method("set_meta"):
-			(nd as Object).set_meta("phvfx_adj_factor", factor)
-
-
-func _get_adj_factor(nd) -> float:
-	if nd == null:
-		return 1.0
-	var obj := nd as Object
-	if obj.has_method("has_meta") and obj.has_meta("phvfx_adj_factor"):
-		var v = obj.get_meta("phvfx_adj_factor")
-		if v != null:
-			return float(v)
-	return 1.0
 
 
 
@@ -2847,8 +2746,6 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_rt_last_chart_ms = -1.0
 	_rt_last_wall_ms = -1
 
-	_mark_adjacent_notes(points)
-	
 	# <<< EARLY LOAD: Load VFX data at song start instead of waiting for first note >>>
 	# This ensures field effects (slides, rotation, scale) and spotlights work
 	# even before the first note spawns.
