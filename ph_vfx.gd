@@ -815,6 +815,12 @@ func _commit_transform(ci: CanvasItem) -> void:
 	ci.queue_redraw()
 
 
+func _apply_rush_graphic_scale_deferred(ci: CanvasItem, vfx_scale: float) -> void:
+	if ci == null or not is_instance_valid(ci):
+		return
+	ci.set_meta("_vfx_scale", vfx_scale)
+	_commit_transform(ci)
+
 
 # ─────────────────────────────────────────────
 # Spotlight overlay helpers
@@ -2388,6 +2394,30 @@ func _parts_for_drawer(d: Node) -> Dictionary:
 	_collect_named(d, "HoldTextSprite", hold_nodes)
 	out["hold_nodes"] = hold_nodes
 
+	var rush_nodes: Array = []
+	_collect_named(d, "RushTextSprite", rush_nodes)
+	if rush_nodes.is_empty():
+		var rush_sprite = d.get("rush_text_sprite")
+		if rush_sprite != null and rush_sprite is CanvasItem:
+			rush_nodes.append(rush_sprite)
+	out["rush_nodes"] = rush_nodes
+
+	var rush_graphic_nodes: Array = []
+	_collect_named(d, "RushNoteGraphic", rush_graphic_nodes)
+	if rush_graphic_nodes.is_empty():
+		var rush_graphic = d.get("rush_note_graphic")
+		if rush_graphic != null and rush_graphic is CanvasItem:
+			rush_graphic_nodes.append(rush_graphic)
+	out["rush_graphic_nodes"] = rush_graphic_nodes
+
+	var rush_bar_nodes: Array = []
+	_collect_named(d, "RushNoteTimingArm", rush_bar_nodes)
+	if rush_bar_nodes.is_empty():
+		var rush_bar = d.get("rush_timing_arm")
+		if rush_bar != null and rush_bar is CanvasItem:
+			rush_bar_nodes.append(rush_bar)
+	out["rush_bar_nodes"] = rush_bar_nodes
+
 	return out
 
 
@@ -2407,15 +2437,18 @@ func _init_part_state(p: Dictionary) -> void:
 	p["_lastS"] = {
 		"h": -1.0, "t": -1.0, "tg": -1.0,
 		"b1": -1.0, "b2": -1.0, "ho": -1.0,
+		"ru": -1.0, "rg": -1.0,
 	}
 	p["_lastC"] = {
 		"h": Color(9,9,9,0), "t": Color(9,9,9,0), "tg": Color(9,9,9,0),
 		"b1": Color(9,9,9,0), "b2": Color(9,9,9,0),
 		"ho": Color(9,9,9,0),
+		"ru": Color(9,9,9,0), "rg": Color(9,9,9,0), "rb": Color(9,9,9,0),
 	}
 	p["_lastR"] = {
 		"h": -9999.0, "t": -9999.0,
 		"tg": -9999.0, "ho": -9999.0,
+		"ru": -9999.0, "rg": -9999.0,
 	}
 	p["_lastO"] = {
 		"h":  Vector2(999999, 999999),
@@ -2424,10 +2457,13 @@ func _init_part_state(p: Dictionary) -> void:
 		"ho": Vector2(999999, 999999),
 		"b1": Vector2(999999, 999999),
 		"b2": Vector2(999999, 999999),
+		"ru": Vector2(999999, 999999),
+		"rg": Vector2(999999, 999999),
 	}
 	p["_lastG"] = {
 		"h": -9999.0, "t": -9999.0, "tg": -9999.0,
 		"b1": -9999.0, "b2": -9999.0, "ho": -9999.0,
+		"ru": -9999.0, "rg": -9999.0,
 	}
 
 
@@ -2667,6 +2703,84 @@ func _apply_parts_all(
 		if h_g is CanvasItem and LG["ho"] != hold_glow:
 			_set_glow(h_g, hold_glow)
 			LG["ho"] = hold_glow
+
+	# -------- RUSH TEXT LABELS --------
+	var rush_nodes: Array = p.get("rush_nodes", [])
+	for rush_item in rush_nodes:
+		if not is_instance_valid(rush_item) or not (rush_item is CanvasItem):
+			continue
+		var rush_ci := rush_item as CanvasItem
+
+		var rush_scale: float = float(S.get("rush", 1.0))
+		var cur_scale: float = rush_ci.scale.x if rush_ci.scale.x == rush_ci.scale.y else 1.0
+		if LS.get("ru", -1.0) != rush_scale or abs(cur_scale - rush_scale) > 0.001:
+			_set_scale(rush_ci, rush_scale)
+			LS["ru"] = rush_scale
+
+		var rush_color: Color = C.get("rush", Color.WHITE)
+		if LC.get("ru", Color(9,9,9,0)) != rush_color:
+			_set_color(rush_ci, rush_color)
+			LC["ru"] = rush_color
+
+		var rush_rot: float = float(R.get("rush", 0.0))
+		if LR.get("ru", -9999.0) != rush_rot:
+			_set_rotation(rush_ci, rush_rot)
+			LR["ru"] = rush_rot
+
+		var rush_ofs: Vector2 = O.get("rush", Vector2.ZERO)
+		if LO.get("ru", Vector2(999999, 999999)) != rush_ofs:
+			_set_offset(rush_ci, rush_ofs)
+			LO["ru"] = rush_ofs
+
+		var rush_glow: float = float(G.get("rush", 0.0))
+		if LG.get("ru", -9999.0) != rush_glow:
+			_set_glow(rush_ci, rush_glow)
+			LG["ru"] = rush_glow
+
+	# -------- RUSH GRAPHIC --------
+	var rush_graphics: Array = p.get("rush_graphic_nodes", [])
+	for rg_item in rush_graphics:
+		if not is_instance_valid(rg_item) or not (rg_item is CanvasItem):
+			continue
+		var rg_ci := rg_item as CanvasItem
+
+		var vfx_scale: float = float(S.get("rush_graphic", 1.0))
+		if abs(vfx_scale - 1.0) > 0.001:
+			_apply_rush_graphic_scale_deferred.call_deferred(rg_ci, vfx_scale)
+
+		var rg_color: Color = C.get("rush_icon", C.get("rush", Color.WHITE))
+		if LC.get("rg", Color(9,9,9,0)) != rg_color:
+			_set_color(rg_ci, rg_color)
+			LC["rg"] = rg_color
+
+		var rg_rot: float = float(R.get("rush_icon", R.get("rush", 0.0)))
+		if LR.get("rg", -9999.0) != rg_rot:
+			_set_rotation(rg_ci, rg_rot)
+			LR["rg"] = rg_rot
+
+		var rg_ofs: Vector2 = O.get("rush_icon", O.get("rush", Vector2.ZERO))
+		if LO.get("rg", Vector2(999999, 999999)) != rg_ofs:
+			_set_offset(rg_ci, rg_ofs)
+			LO["rg"] = rg_ofs
+
+		var rg_glow: float = float(G.get("rush_icon", G.get("rush", 0.0)))
+		if LG.get("rg", -9999.0) != rg_glow:
+			_set_glow(rg_ci, rg_glow)
+			LG["rg"] = rg_glow
+
+		_commit_transform(rg_ci)
+
+	# -------- RUSH BAR --------
+	var rush_bars: Array = p.get("rush_bar_nodes", [])
+	for rb_item in rush_bars:
+		if not is_instance_valid(rb_item) or not (rb_item is CanvasItem):
+			continue
+		var rb_ci := rb_item as CanvasItem
+
+		var rb_color: Color = C.get("rush_bar", Color.WHITE)
+		if LC.get("rb", Color(9,9,9,0)) != rb_color:
+			_set_color(rb_ci, rb_color)
+			LC["rb"] = rb_color
 
 	# -------- COMMIT PACKED TRANSFORMS --------
 	if head != null:
