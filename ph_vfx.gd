@@ -1116,6 +1116,15 @@ func _update_spot_overlay(drawers: Array, t_ms: int) -> void:
 	if anchor != null:
 		target_uv = _note_drawer_to_screen_uv(anchor, false)
 		icon_uv = _note_drawer_to_screen_uv(anchor, true)
+	
+	# During hold_end (past impact time), lock BOTH spotlights to target
+	# Parse impact time from key: "layer@note_type@head_time"
+	var key_parts := best_key.split("@")
+	if key_parts.size() >= 3:
+		var impact_time := int(key_parts[2])
+		if t_ms > impact_time:
+			# We're in hold_end phase - icon has passed target, lock both to target
+			icon_uv = target_uv
 
 	# ----------------------------------------------------------------
 	# 3) Drive shader parameters from sampled SPOT row (parity with editor)
