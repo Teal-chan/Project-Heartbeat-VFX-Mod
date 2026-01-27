@@ -17,8 +17,11 @@ A mod for Project Heartbeat that enables the VFX Shader Pack.
 If you want to try to install it the fancy way, here is how to do it:
 https://docs.google.com/document/d/10dVzzJg0QXKXac_DM4VDYr11qJzUqZjVOY8aETnJ_DQ/edit?usp=sharing
 
-It's a lot easier to just install this instead:
+It's a lot easier to just install these instead. The first link is the game's .pck file with the mod installed, and the second is the required VFXScripts for your user directory.
 https://drive.google.com/file/d/1NYS_pxKe2lU-Dd8PU7a5x7Ok3VQZsJsZ/view?usp=sharing
+https://drive.google.com/file/d/1chI7uHlBLKzyCvMtMGLe6fagVZz01RCY/view?usp=sharing
+
+
 
 Instructions:
 Find the file called "Project Heartbeat.pck" in your Steam folder and replace it with the one in the google link.
