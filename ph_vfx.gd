@@ -73,6 +73,10 @@ var _jl_baseline_label_pos: Vector2 = Vector2.ZERO
 var _jl_original_parent: Node = null
 var _jl_original_index: int = -1
 
+# ─── UserUI support (runtime) ───
+var _userui: Control = null
+var _userui_child_baselines: Dictionary = {}  # child name -> baseline position
+
 # Extra: trail drawers under GameLayer/LAYER_Trails
 var _trail_drawers: Array[Node] = []
 
@@ -289,6 +293,289 @@ func _update_judgement_label(t_ms: float) -> void:
 	else:
 		_jl_wrapper.rotation_degrees = 0.0
 		_jl_wrapper.position = final_pos
+
+# ─────────────────────────────────────────────────────────────
+# UserUI support (runtime)
+# ─────────────────────────────────────────────────────────────
+
+func _ensure_userui(any_drawer: Node) -> void:
+	# Check if any rows have apply_to_userui set
+	var has_any_userui_effect := false
+	for r in _pf_rows:
+		if r.get("apply_to_userui", false):
+			has_any_userui_effect = true
+			break
+	if not has_any_userui_effect:
+		for rr in _pf_rot_rows:
+			if rr.get("apply_to_userui", false):
+				has_any_userui_effect = true
+				break
+	if not has_any_userui_effect:
+		for sr in _pf_scale_rows:
+			if sr.get("apply_to_userui", false):
+				has_any_userui_effect = true
+				break
+	
+	if not has_any_userui_effect:
+		return
+	
+	# Already found?
+	if _userui != null and is_instance_valid(_userui):
+		return
+	
+	# Need a live drawer to climb up and find UserUI
+	if any_drawer == null or not any_drawer.is_inside_tree():
+		return
+	
+	# Walk upwards to find RhythmGame
+	var cur: Node = any_drawer
+	var rhythm_game: Node = null
+	while cur != null:
+		if String(cur.name) == "RhythmGame":
+			rhythm_game = cur
+			break
+		cur = cur.get_parent()
+	
+	if rhythm_game == null:
+		return
+	
+	# Find UserUI - it's the one with TitleBox as a child
+	var all_useruis: Array = []
+	_find_all_by_name(rhythm_game, "UserUI", all_useruis)
+	
+	for ui in all_useruis:
+		if ui is Control:
+			var n := ui as Node
+			var titlebox := n.find_child("TitleBox", false, false)
+			if titlebox != null:
+				_userui = ui as Control
+				# Store baseline positions of all children
+				_userui_child_baselines.clear()
+				for child in _userui.get_children():
+					if child is Control:
+						_userui_child_baselines[child.name] = (child as Control).position
+				print("%s: Found UserUI for field VFX" % LOG_NAME)
+				return
+
+
+func _find_all_by_name(node: Node, target_name: String, results: Array) -> void:
+	if node.name == target_name:
+		results.append(node)
+	for child in node.get_children():
+		_find_all_by_name(child, target_name, results)
+
+
+func _reset_userui() -> void:
+	if _userui == null or not is_instance_valid(_userui):
+		return
+	for child in _userui.get_children():
+		if child is Control:
+			var ctrl := child as Control
+			if _userui_child_baselines.has(ctrl.name):
+				ctrl.position = _userui_child_baselines[ctrl.name]
+			ctrl.rotation = 0.0
+			ctrl.pivot_offset = Vector2.ZERO
+			ctrl.scale = Vector2.ONE
+	_userui = null
+	_userui_child_baselines.clear()
+
+
+func _update_userui(t_ms: float) -> void:
+	if _userui == null or not is_instance_valid(_userui):
+		return
+	
+	# Check if any active rows have apply_to_userui set
+	var has_slide_userui := false
+	var has_scale_userui := false
+	var has_rot_userui := false
+	
+	for r in _pf_rows:
+		if r.get("apply_to_userui", false) and t_ms >= float(r["t0"]):
+			has_slide_userui = true
+			break
+	for sr in _pf_scale_rows:
+		if sr.get("apply_to_userui", false) and t_ms >= float(sr["t0"]):
+			has_scale_userui = true
+			break
+	for rr in _pf_rot_rows:
+		if rr.get("apply_to_userui", false) and t_ms >= float(rr["t0"]):
+			has_rot_userui = true
+			break
+	
+	if not has_slide_userui and not has_scale_userui and not has_rot_userui:
+		# Reset to baseline when no userui effects active
+		for child in _userui.get_children():
+			if child is Control:
+				var ctrl := child as Control
+				if _userui_child_baselines.has(ctrl.name):
+					ctrl.position = _userui_child_baselines[ctrl.name]
+				ctrl.rotation = 0.0
+				ctrl.pivot_offset = Vector2.ZERO
+				ctrl.scale = Vector2.ONE
+		return
+	
+	# Calculate slide offset (position change)
+	var slide_offset := Vector2.ZERO
+	if has_slide_userui:
+		slide_offset = _eval_slide_offset_userui_at(t_ms)
+	
+	# Calculate scale factor
+	var scale_factor := 1.0
+	var scale_pivot := FIELD_PIVOT_GL
+	if has_scale_userui:
+		var scale_result := _eval_scale_userui_at(t_ms)
+		scale_factor = scale_result["factor"]
+		scale_pivot = scale_result["pivot"]
+	
+	# Calculate rotation
+	var angle_deg := 0.0
+	var rot_pivot := FIELD_PIVOT_GL
+	if has_rot_userui:
+		var g := _eval_rot_userui_at(t_ms)
+		if g.get("ok", false):
+			angle_deg = float(g["angle"])
+			rot_pivot = g.get("pivot", FIELD_PIVOT_GL)
+	
+	# Apply transforms to each child
+	for child in _userui.get_children():
+		if child is Control:
+			var ctrl := child as Control
+			var child_name := ctrl.name
+			
+			# Get baseline position
+			if not _userui_child_baselines.has(child_name):
+				_userui_child_baselines[child_name] = ctrl.position
+			var baseline_pos: Vector2 = _userui_child_baselines[child_name]
+			
+			# Start with baseline position + slide offset
+			var new_pos := baseline_pos + slide_offset
+			
+			# Apply scale around pivot
+			if has_scale_userui and scale_factor != 1.0:
+				var rel_to_pivot := new_pos - scale_pivot
+				var scaled_rel := rel_to_pivot * scale_factor
+				new_pos = scale_pivot + scaled_rel
+				ctrl.scale = Vector2(scale_factor, scale_factor)
+			else:
+				ctrl.scale = Vector2.ONE
+			
+			ctrl.position = new_pos
+			
+			# Apply rotation around pivot
+			if has_rot_userui and angle_deg != 0.0:
+				ctrl.pivot_offset = rot_pivot - new_pos
+				ctrl.rotation = deg_to_rad(angle_deg)
+			else:
+				ctrl.pivot_offset = Vector2.ZERO
+				ctrl.rotation = 0.0
+
+
+# Helper: evaluate slide offset for UserUI-only rows at time t_ms
+func _eval_slide_offset_userui_at(t_ms: float) -> Vector2:
+	if _pf_rows.is_empty():
+		return Vector2.ZERO
+	
+	# Build a chain of userui-enabled slide rows sorted by start time
+	var userui_rows: Array = []
+	for r in _pf_rows:
+		if r.get("apply_to_userui", false):
+			userui_rows.append(r)
+	
+	if userui_rows.is_empty():
+		return Vector2.ZERO
+	
+	userui_rows.sort_custom(func(a, b): return float(a["t0"]) < float(b["t0"]))
+	
+	var prev_end := Vector2.ZERO
+	for i in range(userui_rows.size()):
+		var r = userui_rows[i]
+		var t0 := float(r["t0"])
+		var t1 := float(r["t1"])
+		
+		if t_ms < t0:
+			return prev_end
+		elif t_ms <= t1:
+			var pr := _progress(t_ms, t0, t1)
+			var e := _ease_eval(String(r["ease"]), pr)
+			return prev_end.lerp(r["endpoint"], e)
+		else:
+			prev_end = r["endpoint"]
+	
+	return prev_end
+
+
+# Helper: evaluate scale for UserUI-only rows at time t_ms
+func _eval_scale_userui_at(t_ms: float) -> Dictionary:
+	if _pf_scale_rows.is_empty():
+		return {"factor": 1.0, "pivot": FIELD_PIVOT_GL}
+	
+	var userui_rows: Array = []
+	for sr in _pf_scale_rows:
+		if sr.get("apply_to_userui", false):
+			userui_rows.append(sr)
+	
+	if userui_rows.is_empty():
+		return {"factor": 1.0, "pivot": FIELD_PIVOT_GL}
+	
+	userui_rows.sort_custom(func(a, b): return float(a["t0"]) < float(b["t0"]))
+	
+	var prev_scale := 1.0
+	var current_pivot := FIELD_PIVOT_GL
+	
+	for i in range(userui_rows.size()):
+		var sr = userui_rows[i]
+		var t0 := float(sr["t0"])
+		var t1 := float(sr["t1"])
+		current_pivot = sr.get("pivot_gl", FIELD_PIVOT_GL)
+		
+		if t_ms < t0:
+			return {"factor": prev_scale, "pivot": current_pivot}
+		elif t_ms <= t1:
+			var pr := _progress(t_ms, t0, t1)
+			var e := _ease_eval(String(sr["ease"]), pr)
+			var scale_factor := lerpf(float(sr["s0"]), float(sr["s1"]), e)
+			return {"factor": scale_factor, "pivot": current_pivot}
+		else:
+			prev_scale = float(sr["s1"])
+	
+	return {"factor": prev_scale, "pivot": current_pivot}
+
+
+# Helper: evaluate rotation for UserUI-only rows at time t_ms
+func _eval_rot_userui_at(t_ms: float) -> Dictionary:
+	if _pf_rot_rows.is_empty():
+		return {"ok": false}
+	
+	var userui_rows: Array = []
+	for rr in _pf_rot_rows:
+		if rr.get("apply_to_userui", false):
+			userui_rows.append(rr)
+	
+	if userui_rows.is_empty():
+		return {"ok": false}
+	
+	userui_rows.sort_custom(func(a, b): return float(a["t0"]) < float(b["t0"]))
+	
+	var prev_angle := 0.0
+	var current_pivot := FIELD_PIVOT_GL
+	
+	for i in range(userui_rows.size()):
+		var rr = userui_rows[i]
+		var t0 := float(rr["t0"])
+		var t1 := float(rr["t1"])
+		current_pivot = rr.get("pivot_gl", FIELD_PIVOT_GL)
+		
+		if t_ms < t0:
+			return {"ok": true, "angle": prev_angle, "pivot": current_pivot}
+		elif t_ms <= t1:
+			var pr := _progress(t_ms, t0, t1)
+			var e := _ease_eval(String(rr["ease"]), pr)
+			var angle := lerpf(float(rr["a0"]), float(rr["a1"]), e)
+			return {"ok": true, "angle": angle, "pivot": current_pivot}
+		else:
+			prev_angle = float(rr["a1"])
+	
+	return {"ok": true, "angle": prev_angle, "pivot": current_pivot}
 
 # ─────────────────────────────────────────────
 # Metadata
@@ -1719,6 +2006,7 @@ func _ensure_playfield_rows_loaded() -> void:
 					endpoint = Vector2(float(arr[0]), float(arr[1]))
 
 			var ease := String(e.get("pf_slide_ease", "linear"))
+			var apply_userui := bool(e.get("pf_slide_apply_userui", false))
 
 			_pf_rows.append({
 				"t0": t0,
@@ -1726,6 +2014,7 @@ func _ensure_playfield_rows_loaded() -> void:
 				"startpoint": startpoint,
 				"endpoint": endpoint,
 				"ease": ease,
+				"apply_to_userui": apply_userui,
 			})
 
 		elif layer_name == PF_ROTATE_TAG:
@@ -1753,6 +2042,7 @@ func _ensure_playfield_rows_loaded() -> void:
 				"a1": a1,
 				"ease": rease,
 				"pivot_gl": pivot_gl,
+				"apply_to_userui": bool(e.get("pf_rot_apply_userui", false)),
 			})
 
 		# ---- Scale (uniform wrapper scale multiplier) ----
@@ -1779,6 +2069,7 @@ func _ensure_playfield_rows_loaded() -> void:
 				"s1": s1,
 				"ease": sease,
 				"pivot_gl": pivot_gl,
+				"apply_to_userui": bool(e.get("pf_scale_apply_userui", false)),
 			})
 
 	# ---- seconds vs ms heuristic (slides + rotations + scale) ----
@@ -2065,6 +2356,11 @@ func _update_playfield_slides(t_ms: int, any_drawer: Node) -> void:
 	if _jl_wrapper == null or not _jl_wrapper.is_inside_tree():
 		_ensure_judgement_label_wrapper(any_drawer)
 	_update_judgement_label(float(t_ms))
+	
+	# UserUI update (for effects with apply_to_userui flag)
+	if _userui == null or not is_instance_valid(_userui):
+		_ensure_userui(any_drawer)
+	_update_userui(float(t_ms))
 
 
 func _progress(tnow: float, t0: float, t1: float) -> float:
@@ -2860,6 +3156,12 @@ func _preprocess_timing_points(points: Array) -> Array:
 	_jl_baseline_label_pos = Vector2.ZERO
 	_jl_original_parent = null
 	_jl_original_index = -1
+
+	# UserUI (runtime)
+	if _userui != null and is_instance_valid(_userui):
+		_reset_userui()
+	_userui = null
+	_userui_child_baselines.clear()
 
 
 	# Mirai lines (runtime)
