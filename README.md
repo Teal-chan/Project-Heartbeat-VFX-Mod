@@ -30,7 +30,7 @@ A complete visual effects authoring suite that rivals Project Diva's modchart ca
 - **Field VFX**: Playfield-wide slides, rotation, and zoom
 - **Mirai-style link lines**: Connect notes visually like Project Mirai
 - **Real-time preview**: See effects as you author them
-- **Leaderboard legal**: All VFX are purely cosmetic—scores still count!
+- **Leaderboard legal**: All VFX are purely cosmetic—scores still count! (This is a back end modification to 'whitelist' certain modifiers.)
 
 ### 🛠️ Editor Enhancements
 Quality-of-life improvements that streamline the charting workflow:
@@ -174,7 +174,7 @@ A challenge modifier for players seeking perfection.
 
 | Mode | Behavior |
 |------|----------|
-| **Standard** | Fail on SAD or WRONG |
+| **Standard** | Fail on SAFE, SAD, WORST or WRONG |
 | **COOL Only** | Fail on anything except COOL |
 | **FINE Limit** | Allow N FINEs before failing |
 
