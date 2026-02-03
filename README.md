@@ -1,5 +1,5 @@
 
-<img width="1082" height="491" alt="Logo (1)" src="https://github.com/user-attachments/assets/7a565838-9606-468a-bdc5-6a1a74ee52dd" />
+<img width="1168" height="534" alt="Logo (1)" src="https://github.com/user-attachments/assets/1e73df1e-a6c0-4e8b-a02f-111ef744770a" />
 
 <img width="189" height="208" alt="scale" src="https://github.com/user-attachments/assets/629e8d95-0b73-4d3b-a8ec-a1533977b883" />
 <img width="165" height="201" alt="color" src="https://github.com/user-attachments/assets/c738a7fa-f767-416a-80e3-c31c74a2280f" />
@@ -14,7 +14,7 @@
 <img width="839" height="475" alt="Screenshot 2025-11-03 095214" src="https://github.com/user-attachments/assets/72143b95-d6b1-4c92-a137-720ff5631873" />
 <img width="1897" height="611" alt="Screenshot 2026-02-03 014628" src="https://github.com/user-attachments/assets/a508a9f5-dc83-488e-a0de-cda96ab7d0f7" />
 
-# Project Heartbeat Advanced Mode
+# Project Heartbeat Extend
 
 A comprehensive modding framework for [Project Heartbeat](https://store.steampowered.com/app/1216230/Project_Heartbeat/) that adds professional-grade VFX authoring, quality-of-life editor improvements, and new gameplay features.
 
