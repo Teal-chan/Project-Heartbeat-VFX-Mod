@@ -27,7 +27,7 @@ Created by **An Idol in Teal** (Josh), with assistance from AI tools.
 ### 🎨 VFX Modcharting System
 A complete visual effects authoring suite that rivals Project Diva's modchart capabilities:
 
-- **Per-note effects**: Scale, Color, Rotation, Offset, Glow
+- **Per-note animated effects**: Scale, Color, Rotation, Offset, Glow
 - **Spotlight system**: Dramatic focus effects that follow notes
 - **Field VFX**: Playfield-wide slides, rotation, and zoom
 - **Mirai-style link lines**: Connect notes visually like Project Mirai
