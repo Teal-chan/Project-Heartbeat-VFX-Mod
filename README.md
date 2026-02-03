@@ -40,7 +40,7 @@ Quality-of-life improvements that streamline the charting workflow:
 - **Bookmarks system**: Annotate your charts with timestamped notes
 - **Icon pack switcher**: Change note icons without leaving the editor
 - **Open in external editor**: Quick access to chart JSON files
-- **Plus dozens more**
+- **Plus dozens more** (Playhead controls, selection utilities, VFX Inspector and Summary, etc.)
 
 ### 🎮 New Gameplay Features
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
