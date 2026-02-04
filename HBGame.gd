@@ -75,6 +75,7 @@ var serializable_types = {
 	"BpmChange": load("res://scripts/timing_points/HBBPMChange.gd"),
 	"TimingChange": load("res://scripts/timing_points/HBTimingChange.gd"),
 	"Song": load("res://scripts/HBSong.gd"),
+	"MediaItem": load("res://menus/media_player/HBMediaItem.gd"),
 	"Result": load("res://scripts/HBResult.gd"),
 	"UserSettings": load("res://scripts/HBUserSettings.gd"),
 	"SongSortFilterSettings": load("res://menus/HBSongSortFilterSettings.gd"),
