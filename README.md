@@ -238,6 +238,8 @@ The note inspector now shows calculated values:
 
 Values update in real-time as you edit note properties.
 
+This feature will eventually be included in the base game, so it will soon become redundant. 
+
 ---
 
 ## 🎯 Technical Details
