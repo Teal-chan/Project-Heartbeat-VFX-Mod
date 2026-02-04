@@ -60,29 +60,6 @@ Quality-of-life improvements that streamline the charting workflow:
 3. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1gz9GFCSqnMsNbNOyBmmpixi1ylXfNN4A/view?usp=sharing
 3. Launch the game normally (Or preferably, from command prompt/terminal to see the console outputs)
 
-### File Structure
-```
-Project Heartbeat/
-├── rythm_game/
-│   └── modifiers/
-│       ├── ph_vfx/           # VFX runtime modifier
-│       └── perfect_run/       # Perfect Run modifier
-├── tools/
-│   └── editor/
-│       ├── Editor.gd          # Modded editor with toolbar buttons
-│       ├── Editor.tscn
-│       ├── EditorInspector.gd # Enhanced inspector
-│       └── WorkshopUploadForm.gd  # VFX upload support
-├── menus/
-│   ├── song_list/
-│   │   └── SongListItem.gd    # VFX indicator
-│   ├── workshop_browser/
-│   │   └── WorkshopItemThumbnail.gd  # Workshop VFX badge
-│   └── pregame_screen/
-│       └── PreGameScreen.gd   # VFX context bridge
-└── user://editor_scripts/     # VFX authoring modules (created on first run)
-```
-
 ---
 
 ## 🎨 VFX System Guide
