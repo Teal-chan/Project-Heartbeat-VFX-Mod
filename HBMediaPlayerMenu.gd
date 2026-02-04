@@ -10,6 +10,8 @@ const MediaPlayerController = preload("res://menus/media_player/HBMediaPlayerCon
 signal song_changed(item)
 signal pause_background_player
 signal resume_background_player
+signal play_song_in_background(song)
+signal background_changed(texture, use_default)
 
 # Node references
 @onready var playlist_container: VBoxContainer = $MainContainer/PlaylistPanel/VBoxContainer/ScrollContainer/PlaylistContainer
@@ -26,6 +28,7 @@ signal resume_background_player
 @onready var volume_slider: HSlider = $MainContainer/PlayerPanel/VBoxContainer/BottomControls/VolumeContainer/VolumeSlider
 @onready var thumbnail_display: TextureRect = $MainContainer/PlayerPanel/VBoxContainer/ThumbnailDisplay
 @onready var add_files_button: Button = $MainContainer/PlaylistPanel/VBoxContainer/AddFilesButton
+@onready var play_in_game_button: Button = $MainContainer/PlayerPanel/VBoxContainer/BottomControls/PlayInGameButton
 
 # Playlist item scene
 var PlaylistItemScene = preload("res://menus/media_player/HBMediaPlaylistItem.tscn")
@@ -40,6 +43,7 @@ var file_dialog: FileDialog
 # UI state
 var _seeking: bool = false
 var _playlist_items: Array = []
+var _launching_to_game: bool = false
 
 # Button text
 const TEXT_PLAY = "▶"
@@ -104,6 +108,7 @@ func _setup_ui_connections():
 	shuffle_button.pressed.connect(_on_shuffle_button_pressed)
 	repeat_button.pressed.connect(_on_repeat_button_pressed)
 	add_files_button.pressed.connect(_on_add_files_button_pressed)
+	play_in_game_button.pressed.connect(_on_play_in_game_button_pressed)
 	
 	volume_slider.value_changed.connect(_on_volume_slider_changed)
 	
@@ -139,9 +144,11 @@ func _on_menu_exit(force_hard_transition=false):
 	# Save playlist state
 	playlist.save()
 	
-	# Resume background music when leaving (unless we're still playing)
-	if not controller.is_playing():
+	# Resume background music when leaving, unless we're launching to game or still playing
+	if not _launching_to_game and not controller.is_playing():
 		emit_signal("resume_background_player")
+	
+	_launching_to_game = false
 
 
 # UI Update Methods
@@ -172,6 +179,27 @@ func _update_ui_state():
 		MediaPlaylist.RepeatMode.ONE:
 			repeat_button.text = TEXT_REPEAT_ONE
 			repeat_button.modulate = Color.WHITE
+	
+	# Update play in game button - only enable if we have a valid song
+	var current_item = playlist.get_current()
+	play_in_game_button.disabled = not _can_play_in_game(current_item)
+
+
+func _can_play_in_game(item) -> bool:
+	if not item:
+		return false
+	
+	# Get the folder name from our audio path (e.g., "song_name" from ".../editor_songs/song_name/audio.ogg")
+	var song_folder = item.audio_path.get_base_dir().get_file()
+	
+	for song_id in SongLoader.songs:
+		var song = SongLoader.songs[song_id] as HBSong
+		# Get the folder name from the song's path
+		var song_path_folder = song.path.trim_suffix("/").get_file()
+		if song_path_folder == song_folder:
+			return song.charts.size() > 0
+	
+	return false
 
 
 func _update_now_playing(item):
@@ -229,10 +257,41 @@ func _on_playback_started(item):
 	# Pause the game's background music when we start playing
 	emit_signal("pause_background_player")
 	
+	# Update rich presence
+	if HBGame.rich_presence:
+		HBGame.rich_presence.notify_media_player(item.get_display_title(), item.get_display_artist())
+	
+	# Load background image from the matching HBSong
+	var hb_song = _find_hb_song_for_item(item)
+	if hb_song:
+		var token := SongAssetLoader.request_asset_load(hb_song, [SongAssetLoader.ASSET_TYPES.BACKGROUND])
+		token.assets_loaded.connect(_on_background_loaded)
+	
 	_update_now_playing(item)
 	_update_ui_state()
 	_highlight_current_item()
 	emit_signal("song_changed", item)
+
+
+func _find_hb_song_for_item(item) -> HBSong:
+	if not item:
+		return null
+	var song_folder = item.audio_path.get_base_dir().get_file()
+	for song_id in SongLoader.songs:
+		var song = SongLoader.songs[song_id] as HBSong
+		var song_path_folder = song.path.trim_suffix("/").get_file()
+		if song_path_folder == song_folder:
+			return song
+	return null
+
+
+func _on_background_loaded(token: SongAssetLoader.AssetLoadToken):
+	var background = token.get_asset(SongAssetLoader.ASSET_TYPES.BACKGROUND)
+	if background:
+		emit_signal("background_changed", background, false)
+	else:
+		# No background - signal to use default
+		emit_signal("background_changed", null, true)
 
 
 func _on_playback_paused():
@@ -250,6 +309,10 @@ func _on_playback_stopped():
 	_highlight_current_item()
 	progress_bar.value = 0
 	time_current_label.text = "0:00"
+	
+	# Reset rich presence to main menu
+	if HBGame.rich_presence:
+		HBGame.rich_presence.notify_at_main_menu()
 	
 	# Resume background music when we stop
 	emit_signal("resume_background_player")
@@ -340,6 +403,49 @@ func _on_progress_value_changed(value: float):
 
 func _on_add_files_button_pressed():
 	file_dialog.popup_centered_ratio(0.7)
+
+
+func _on_play_in_game_button_pressed():
+	var current_item = playlist.get_current()
+	if not current_item:
+		return
+	
+	# Get the folder name from our audio path
+	var song_folder = current_item.audio_path.get_base_dir().get_file()
+	var hb_song: HBSong = null
+	
+	for song_id in SongLoader.songs:
+		var song = SongLoader.songs[song_id] as HBSong
+		var song_path_folder = song.path.trim_suffix("/").get_file()
+		if song_path_folder == song_folder:
+			hb_song = song
+			break
+	
+	if not hb_song:
+		push_warning("Media Player: Could not find matching game song for: " + current_item.audio_path)
+		return
+	
+	# Get the first available difficulty
+	var difficulty = ""
+	if hb_song.charts.size() > 0:
+		difficulty = hb_song.charts.keys()[0]
+	
+	if difficulty.is_empty():
+		push_warning("Media Player: Song has no charts: " + hb_song.title)
+		return
+	
+	# Stop media player audio - let the background player take over with this song
+	controller.stop()
+	
+	# Emit signal to tell background player to play this song
+	# This will also trigger the background image to update
+	emit_signal("play_song_in_background", hb_song)
+	
+	# Mark that we're launching to game
+	_launching_to_game = true
+	
+	# Launch the game
+	change_to_menu("pre_game", false, {"song": hb_song, "difficulty": difficulty})
 
 
 func _on_files_selected(paths: PackedStringArray):
