@@ -1,0 +1,158 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://menus/media_player/HBMediaPlayerMenu.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://b1mbegd5nhs23" path="res://graphics/no_preview_texture.png" id="2"]
+
+[node name="MediaPlayerMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="MainContainer" type="HSplitContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+split_offset = 350
+
+[node name="PlaylistPanel" type="PanelContainer" parent="MainContainer"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainContainer/PlaylistPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="MainContainer/PlaylistPanel/VBoxContainer"]
+layout_mode = 2
+text = "Playlist"
+horizontal_alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MainContainer/PlaylistPanel/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PlaylistContainer" type="VBoxContainer" parent="MainContainer/PlaylistPanel/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 5
+
+[node name="AddFilesButton" type="Button" parent="MainContainer/PlaylistPanel/VBoxContainer"]
+layout_mode = 2
+text = "Add Files..."
+
+[node name="PlayerPanel" type="PanelContainer" parent="MainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainContainer/PlayerPanel"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="ThumbnailDisplay" type="TextureRect" parent="MainContainer/PlayerPanel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+size_flags_vertical = 3
+texture = ExtResource("2")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NowPlayingLabel" type="Label" parent="MainContainer/PlayerPanel/VBoxContainer"]
+layout_mode = 2
+text = "No Track Selected"
+horizontal_alignment = 1
+
+[node name="ArtistLabel" type="Label" parent="MainContainer/PlayerPanel/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+
+[node name="ProgressContainer" type="VBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="ProgressBar" type="HSlider" parent="MainContainer/PlayerPanel/VBoxContainer/ProgressContainer"]
+layout_mode = 2
+max_value = 100.0
+step = 0.1
+
+[node name="TimeContainer" type="HBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer/ProgressContainer"]
+layout_mode = 2
+
+[node name="CurrentTimeLabel" type="Label" parent="MainContainer/PlayerPanel/VBoxContainer/ProgressContainer/TimeContainer"]
+layout_mode = 2
+text = "0:00"
+
+[node name="Spacer" type="Control" parent="MainContainer/PlayerPanel/VBoxContainer/ProgressContainer/TimeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TotalTimeLabel" type="Label" parent="MainContainer/PlayerPanel/VBoxContainer/ProgressContainer/TimeContainer"]
+layout_mode = 2
+text = "0:00"
+
+[node name="ControlsContainer" type="HBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="ShuffleButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+tooltip_text = "Shuffle"
+text = "🔀"
+
+[node name="PrevButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+tooltip_text = "Previous"
+text = "⏮"
+
+[node name="PlayButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
+custom_minimum_size = Vector2(70, 70)
+layout_mode = 2
+tooltip_text = "Play/Pause"
+text = "▶"
+
+[node name="NextButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+tooltip_text = "Next"
+text = "⏭"
+
+[node name="RepeatButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+tooltip_text = "Repeat"
+text = "🔁"
+
+[node name="BottomControls" type="HBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="MainContainer/PlayerPanel/VBoxContainer/BottomControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VolumeContainer" type="HBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer/BottomControls"]
+layout_mode = 2
+
+[node name="VolumeLabel" type="Label" parent="MainContainer/PlayerPanel/VBoxContainer/BottomControls/VolumeContainer"]
+layout_mode = 2
+text = "🔊"
+
+[node name="VolumeSlider" type="HSlider" parent="MainContainer/PlayerPanel/VBoxContainer/BottomControls/VolumeContainer"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 1.0
