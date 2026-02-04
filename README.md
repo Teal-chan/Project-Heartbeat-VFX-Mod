@@ -47,6 +47,7 @@ Quality-of-life improvements that streamline the charting workflow:
 ### 🎮 New Gameplay Features
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
 - **VFX indicators**: See which songs have VFX before playing
+- **Media Player**: Play any song in your Project Heartbeat library (Audio only)
 
 ---
 
@@ -189,6 +190,18 @@ A togglable on-screen counter displays:
 ### Leaderboard Legal
 
 Perfect Run only makes the game harder, so scores are fully leaderboard-eligible.
+
+---
+
+## 🎵 Media Player
+
+An audio-only media player for any song in your Project Heartbeat library.
+
+### Features
+
+- **Media controls**: Forward and back, shuffle, repeat
+- **Serializable playlist**: Your song list persists on exit.
+- **Audio Only**: Due to serious difficulties with video sync, this feature can only play audio.
 
 ---
 
