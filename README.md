@@ -225,7 +225,7 @@ These functions were previously buried in the Open Chart dialog—now they're on
 The note inspector now shows calculated values:
 
 ### For All Notes
-- **Timeout**: How long until the note expires (accounts for note speed changes)
+- **Timeout**: The note's actual duration on screen until impact
 
 ### For Sustain Notes
 - **Duration**: Length in milliseconds
