@@ -179,6 +179,7 @@ An audio-only media player for any song in your Project Heartbeat library.
 - **Media controls**: Forward and back, shuffle, repeat
 - **Serializable playlist**: Your song list persists on exit.
 - **Audio Only**: Due to serious difficulties with video sync, this feature can only play audio.
+- **Play In Game button**: Brings up the PreGameScreen for the currently playing song.
 - **Rich Presence Integration**: Currently only supported on Discord.
 
 ---
