@@ -281,6 +281,10 @@ Custom shaders handle visual transforms:
 
 All transforms are GPU-accelerated with proper pivot handling.
 
+### Leaderboard Legality
+
+Both custom modifiers are flagged to be leaderboard-legal due to a change in the game's modifier check system. It now asks the modifiers if they are legal, and if even one of them doesn't answer, the run is disqualified.
+
 ---
 
 ## 🤝 Contributing
