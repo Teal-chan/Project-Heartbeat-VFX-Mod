@@ -217,7 +217,7 @@ New buttons added to the editor's top bar:
 | 📁 | Open chart JSON in external editor |
 | 🎨 | Select icon pack |
 
-These functions were previously buried in the Open Chart dialog—now they're one click away.
+These functions were previously buried in the Open Chart dialog, or else they didn't exist, and now they're one click away.
 
 ---
 
