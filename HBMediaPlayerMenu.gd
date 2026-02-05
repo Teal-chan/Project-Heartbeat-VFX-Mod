@@ -15,6 +15,21 @@ signal background_changed(texture, use_default)
 
 # Node references
 @onready var playlist_container: VBoxContainer = $MainContainer/PlaylistPanel/VBoxContainer/ScrollContainer/PlaylistContainer
+@onready var playlist_name_label: Label = $MainContainer/PlaylistPanel/VBoxContainer/PlaylistHeader/PlaylistNameLabel
+@onready var new_playlist_button: Button = $MainContainer/PlaylistPanel/VBoxContainer/PlaylistHeader/NewPlaylistButton
+@onready var choose_playlist_button: Button = $MainContainer/PlaylistPanel/VBoxContainer/PlaylistHeader/ChoosePlaylistButton
+@onready var new_playlist_dialog: ConfirmationDialog = $NewPlaylistDialog
+@onready var new_playlist_line_edit: LineEdit = $NewPlaylistDialog/LineEdit
+@onready var choose_playlist_dialog: ConfirmationDialog = $ChoosePlaylistDialog
+@onready var choose_playlist_list: ItemList = $ChoosePlaylistDialog/ItemList
+@onready var folder_choice_dialog: ConfirmationDialog = $FolderChoiceDialog
+@onready var official_songs_button: Button = $FolderChoiceDialog/VBoxContainer/OfficialSongsButton
+@onready var editor_folder_button: Button = $FolderChoiceDialog/VBoxContainer/EditorFolderButton
+@onready var workshop_folder_button: Button = $FolderChoiceDialog/VBoxContainer/WorkshopFolderButton
+@onready var official_songs_dialog: ConfirmationDialog = $OfficialSongsDialog
+@onready var official_songs_list: ItemList = $OfficialSongsDialog/VBoxContainer/OfficialSongsList
+@onready var select_all_button: Button = $OfficialSongsDialog/VBoxContainer/HBoxContainer/SelectAllButton
+@onready var select_none_button: Button = $OfficialSongsDialog/VBoxContainer/HBoxContainer/SelectNoneButton
 @onready var now_playing_label: Label = $MainContainer/PlayerPanel/VBoxContainer/NowPlayingLabel
 @onready var artist_label: Label = $MainContainer/PlayerPanel/VBoxContainer/ArtistLabel
 @onready var progress_bar: HSlider = $MainContainer/PlayerPanel/VBoxContainer/ProgressContainer/ProgressBar
@@ -76,13 +91,16 @@ func _ready():
 	
 	print("[MediaPlayerMenu] Controller initialized")
 	
-	# Load default playlist
-	playlist = MediaPlaylist.load_playlist(MediaPlaylist.DEFAULT_PLAYLIST_NAME)
+	# Load last used playlist (or default)
+	var last_playlist_name = _load_last_playlist_name()
+	playlist = MediaPlaylist.load_playlist(last_playlist_name)
 	if not playlist:
-		print("[MediaPlayerMenu] ERROR: Failed to create playlist!")
+		print("[MediaPlayerMenu] ERROR: Failed to load playlist, falling back to default")
+		playlist = MediaPlaylist.load_playlist(MediaPlaylist.DEFAULT_PLAYLIST_NAME)
+	if not playlist:
 		playlist = MediaPlaylist.new(MediaPlaylist.DEFAULT_PLAYLIST_NAME)
 	
-	print("[MediaPlayerMenu] Playlist loaded")
+	print("[MediaPlayerMenu] Playlist loaded: ", playlist.name)
 	
 	# Connect UI signals
 	_setup_ui_connections()
@@ -109,6 +127,23 @@ func _setup_ui_connections():
 	repeat_button.pressed.connect(_on_repeat_button_pressed)
 	add_files_button.pressed.connect(_on_add_files_button_pressed)
 	play_in_game_button.pressed.connect(_on_play_in_game_button_pressed)
+	
+	# Playlist control connections
+	new_playlist_button.pressed.connect(_on_new_playlist_button_pressed)
+	choose_playlist_button.pressed.connect(_on_choose_playlist_button_pressed)
+	new_playlist_dialog.confirmed.connect(_on_new_playlist_confirmed)
+	choose_playlist_dialog.confirmed.connect(_on_choose_playlist_confirmed)
+	
+	# Folder choice connections
+	folder_choice_dialog.confirmed.connect(_on_folder_choice_browse)
+	official_songs_button.pressed.connect(_on_official_songs_selected)
+	editor_folder_button.pressed.connect(_on_editor_folder_selected)
+	workshop_folder_button.pressed.connect(_on_workshop_folder_selected)
+	
+	# Official songs selection dialog connections
+	official_songs_dialog.confirmed.connect(_on_official_songs_confirmed)
+	select_all_button.pressed.connect(_on_select_all_official)
+	select_none_button.pressed.connect(_on_select_none_official)
 	
 	volume_slider.value_changed.connect(_on_volume_slider_changed)
 	
@@ -154,6 +189,9 @@ func _on_menu_exit(force_hard_transition=false):
 # UI Update Methods
 
 func _update_ui_state():
+	# Update playlist name label
+	playlist_name_label.text = "Playlist: " + playlist.name
+	
 	# Update play/pause button
 	if controller.is_playing():
 		play_button.text = TEXT_PAUSE
@@ -402,7 +440,240 @@ func _on_progress_value_changed(value: float):
 
 
 func _on_add_files_button_pressed():
+	folder_choice_dialog.popup_centered()
+
+
+# Store official songs data for selection dialog
+var _official_songs_data: Array = []
+
+func _on_official_songs_selected():
+	folder_choice_dialog.hide()
+	
+	# Build list of official songs
+	_official_songs_data.clear()
+	official_songs_list.clear()
+	
+	for song_id in SongLoader.songs:
+		var song = SongLoader.songs[song_id] as HBSong
+		# Official songs have paths starting with res://songs
+		if song.path.begins_with("res://songs"):
+			var audio_path = song.get_song_audio_res_path()
+			if not audio_path.is_empty() and FileAccess.file_exists(audio_path):
+				# Check if already in playlist
+				var already_exists = false
+				for item in playlist.items:
+					if item.audio_path.get_base_dir().get_file() == song.path.get_file():
+						already_exists = true
+						break
+				
+				if not already_exists:
+					_official_songs_data.append(song)
+					var display_text = "%s - %s" % [song.artist, song.title]
+					official_songs_list.add_item(display_text)
+	
+	if _official_songs_data.is_empty():
+		print("[MediaPlayer] No official songs available to add")
+		return
+	
+	# Sort alphabetically by display name
+	official_songs_dialog.popup_centered()
+
+
+func _on_official_songs_confirmed():
+	var selected_indices = official_songs_list.get_selected_items()
+	if selected_indices.is_empty():
+		return
+	
+	var added_count = 0
+	for idx in selected_indices:
+		var song = _official_songs_data[idx] as HBSong
+		var audio_path = song.get_song_audio_res_path()
+		
+		var item = MediaItem.from_file(audio_path)
+		item.title = song.title
+		item.artist = song.artist
+		playlist.add_item(item)
+		added_count += 1
+	
+	if added_count > 0:
+		_rebuild_playlist_ui()
+		playlist.save()
+		print("[MediaPlayer] Added %d official songs" % added_count)
+
+
+func _on_select_all_official():
+	for i in range(official_songs_list.item_count):
+		official_songs_list.select(i, false)
+
+
+func _on_select_none_official():
+	official_songs_list.deselect_all()
+
+
+func _on_editor_folder_selected():
+	folder_choice_dialog.hide()
+	var editor_path = ProjectSettings.globalize_path("user://editor_songs")
+	file_dialog.current_dir = editor_path
 	file_dialog.popup_centered_ratio(0.7)
+
+
+func _on_workshop_folder_selected():
+	folder_choice_dialog.hide()
+	var workshop_path = _get_workshop_path()
+	if not workshop_path.is_empty():
+		file_dialog.current_dir = workshop_path
+	file_dialog.popup_centered_ratio(0.7)
+
+
+func _on_folder_choice_browse():
+	# "Browse..." button - just open file dialog at current/default location
+	file_dialog.popup_centered_ratio(0.7)
+
+
+func _get_workshop_path() -> String:
+	# Try to find Steam workshop content folder for Project Heartbeat
+	# App ID is 1216230
+	var possible_paths = []
+	
+	if OS.get_name() == "Windows":
+		# Common Steam install locations on Windows
+		possible_paths = [
+			"C:/Program Files (x86)/Steam/steamapps/workshop/content/1216230",
+			"C:/Program Files/Steam/steamapps/workshop/content/1216230",
+			"D:/Steam/steamapps/workshop/content/1216230",
+			"D:/SteamLibrary/steamapps/workshop/content/1216230",
+			"E:/Steam/steamapps/workshop/content/1216230",
+			"E:/SteamLibrary/steamapps/workshop/content/1216230",
+		]
+	elif OS.get_name() == "Linux":
+		var home = OS.get_environment("HOME")
+		possible_paths = [
+			home + "/.steam/steam/steamapps/workshop/content/1216230",
+			home + "/.local/share/Steam/steamapps/workshop/content/1216230",
+		]
+	elif OS.get_name() == "macOS":
+		var home = OS.get_environment("HOME")
+		possible_paths = [
+			home + "/Library/Application Support/Steam/steamapps/workshop/content/1216230",
+		]
+	
+	for path in possible_paths:
+		if DirAccess.dir_exists_absolute(path):
+			return path
+	
+	# Fallback - return empty and let user navigate
+	return ""
+
+
+func _on_new_playlist_button_pressed():
+	new_playlist_line_edit.text = ""
+	new_playlist_dialog.popup_centered()
+	new_playlist_line_edit.grab_focus()
+
+
+func _on_new_playlist_confirmed():
+	var new_name = new_playlist_line_edit.text.strip_edges()
+	if new_name.is_empty():
+		return
+	
+	# Sanitize name for filesystem
+	new_name = new_name.replace("/", "_").replace("\\", "_").replace(":", "_")
+	
+	# Save current playlist first
+	playlist.save()
+	
+	# Stop playback when switching playlists
+	controller.stop()
+	
+	# Create new playlist
+	playlist = MediaPlaylist.new(new_name)
+	playlist.save()
+	
+	# Remember this playlist for next time
+	_save_last_playlist_name(new_name)
+	
+	_rebuild_playlist_ui()
+	_update_ui_state()
+	_update_now_playing(null)
+
+
+func _on_choose_playlist_button_pressed():
+	# Populate the playlist list
+	choose_playlist_list.clear()
+	
+	var playlists = _get_available_playlists()
+	for pl_name in playlists:
+		choose_playlist_list.add_item(pl_name)
+	
+	# Select current playlist
+	var current_idx = playlists.find(playlist.name)
+	if current_idx >= 0:
+		choose_playlist_list.select(current_idx)
+	
+	choose_playlist_dialog.popup_centered()
+	choose_playlist_list.grab_focus()
+
+
+func _on_choose_playlist_confirmed():
+	var selected_items = choose_playlist_list.get_selected_items()
+	if selected_items.is_empty():
+		return
+	
+	var selected_name = choose_playlist_list.get_item_text(selected_items[0])
+	if selected_name == playlist.name:
+		return  # Same playlist, no change needed
+	
+	# Save current playlist first
+	playlist.save()
+	
+	# Stop playback when switching playlists
+	controller.stop()
+	
+	# Load selected playlist
+	playlist = MediaPlaylist.load_playlist(selected_name)
+	
+	# Remember this playlist for next time
+	_save_last_playlist_name(selected_name)
+	
+	_rebuild_playlist_ui()
+	_update_ui_state()
+	_update_now_playing(null)
+
+
+func _get_available_playlists() -> Array:
+	var playlists = []
+	var dir = DirAccess.open("user://media_playlists")
+	if dir:
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		while file_name != "":
+			if not dir.current_is_dir() and file_name.ends_with(".json"):
+				playlists.append(file_name.get_basename())
+			file_name = dir.get_next()
+		dir.list_dir_end()
+	
+	# Ensure default is always available
+	if not "default" in playlists:
+		playlists.insert(0, "default")
+	
+	playlists.sort()
+	return playlists
+
+
+const SETTINGS_PATH = "user://media_playlists/settings.cfg"
+
+func _save_last_playlist_name(playlist_name: String):
+	var config = ConfigFile.new()
+	config.set_value("media_player", "last_playlist", playlist_name)
+	config.save(SETTINGS_PATH)
+
+
+func _load_last_playlist_name() -> String:
+	var config = ConfigFile.new()
+	var err = config.load(SETTINGS_PATH)
+	if err == OK:
+		return config.get_value("media_player", "last_playlist", MediaPlaylist.DEFAULT_PLAYLIST_NAME)
+	return MediaPlaylist.DEFAULT_PLAYLIST_NAME
 
 
 func _on_play_in_game_button_pressed():
