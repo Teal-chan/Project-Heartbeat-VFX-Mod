@@ -186,9 +186,11 @@ func _ready():
 	MENUS["latency_tester"].fullscreen.connect("resume_background_player", Callable(player, "resume"))
 	
 	# Add this in MainMenu.gd _ready() after the other menu connections:
-	MENUS["media_player"].left.connect("pause_background_player", Callable(player, "pause"))
-	MENUS["media_player"].left.connect("resume_background_player", Callable(player, "resume"))
-	
+	# Media player connections - use call_deferred to ensure signals exist
+	MENUS["media_player"].left.connect("pause_background_player", Callable(player, "pause"), CONNECT_DEFERRED)
+	MENUS["media_player"].left.connect("resume_background_player", Callable(player, "resume"), CONNECT_DEFERRED)
+	MENUS["media_player"].left.connect("play_song_in_background", Callable(player, "play_song"), CONNECT_DEFERRED)
+	MENUS["media_player"].left.connect("background_changed", Callable(self, "change_to_background"), CONNECT_DEFERRED)
 	SongLoader.connect("all_songs_loaded", Callable(MENUS["song_list"].left, "_on_songs_reloaded"))
 	SongLoader.connect("all_songs_loaded", Callable(MENUS["song_list_lobby"].left, "_on_songs_reloaded"))
 	
