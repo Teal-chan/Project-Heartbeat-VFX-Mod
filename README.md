@@ -192,7 +192,7 @@ Add notes and markers to your charts for organization.
 
 - **Timestamped notes**: Mark sections with descriptions
 - **Color coding**: Customize bookmark colors for categorization
-- **Quick navigation**: Jump between bookmarks with Prev/Next buttons
+- **Quick navigation**: Jump between bookmarks with Prev/Next and number buttons
 - **Timeline markers**: Visual lines on the timeline at bookmark positions
 - **Per-chart storage**: Bookmarks are saved alongside your chart files
 
