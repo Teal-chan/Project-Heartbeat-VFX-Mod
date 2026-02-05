@@ -26,19 +26,32 @@ func _pre_game(song: HBSong, game: HBRhythmGame) -> void:
 	if not _game.is_connected("note_judged", Callable(self, "_on_note_judged")):
 		_game.connect("note_judged", Callable(self, "_on_note_judged"))
 	
+	if not _game.is_connected("restarting", Callable(self, "_on_restart")):
+		_game.connect("restarting", Callable(self, "_on_restart"))
+	
 	var settings := modifier_settings as PerfectRunSettings
 	if settings and settings.show_fine_counter:
 		_create_fine_window()
 		_update_fine_window()
 
 func _post_game(song: HBSong, game: HBRhythmGame) -> void:
-	if _game and _game.is_connected("note_judged", Callable(self, "_on_note_judged")):
-		_game.disconnect("note_judged", Callable(self, "_on_note_judged"))
+	if _game:
+		if _game.is_connected("note_judged", Callable(self, "_on_note_judged")):
+			_game.disconnect("note_judged", Callable(self, "_on_note_judged"))
+		if _game.is_connected("restarting", Callable(self, "_on_restart")):
+			_game.disconnect("restarting", Callable(self, "_on_restart"))
 	_game = null
 	_failed = false
 	_fine_count = 0
 	
 	_destroy_fine_window()
+
+
+func _on_restart() -> void:
+	_failed = false
+	_fine_count = 0
+	_update_fine_window()
+
 
 func _create_fine_window() -> void:
 	_destroy_fine_window()
@@ -178,7 +191,7 @@ func get_modifier_list_name():
 
 static func get_modifier_description():
 	return TranslationServer.tr(
-		"Fails the song on the first non-passing hit. You can enable COOL-only mode, and/or set a maximum number of FINE judgements before the run fails.",
+		"Fails the song on the first non-passing hit. Can upload scores to leaderboard.",
 		&"Perfect Run modifier description"
 	)
 
