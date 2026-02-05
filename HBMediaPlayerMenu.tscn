@@ -33,10 +33,25 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="MainContainer/PlaylistPanel/VBoxContainer"]
+[node name="PlaylistHeader" type="HBoxContainer" parent="MainContainer/PlaylistPanel/VBoxContainer"]
 layout_mode = 2
-text = "Playlist"
-horizontal_alignment = 1
+
+[node name="PlaylistNameLabel" type="Label" parent="MainContainer/PlaylistPanel/VBoxContainer/PlaylistHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Playlist: default"
+
+[node name="NewPlaylistButton" type="Button" parent="MainContainer/PlaylistPanel/VBoxContainer/PlaylistHeader"]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+tooltip_text = "New Playlist"
+text = "+"
+
+[node name="ChoosePlaylistButton" type="Button" parent="MainContainer/PlaylistPanel/VBoxContainer/PlaylistHeader"]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+tooltip_text = "Choose Playlist"
+text = "📂"
 
 [node name="ScrollContainer" type="ScrollContainer" parent="MainContainer/PlaylistPanel/VBoxContainer"]
 layout_mode = 2
@@ -51,6 +66,88 @@ theme_override_constants/separation = 5
 [node name="AddFilesButton" type="Button" parent="MainContainer/PlaylistPanel/VBoxContainer"]
 layout_mode = 2
 text = "Add Files..."
+
+[node name="NewPlaylistDialog" type="ConfirmationDialog" parent="."]
+title = "New Playlist"
+size = Vector2i(300, 100)
+visible = false
+
+[node name="LineEdit" type="LineEdit" parent="NewPlaylistDialog"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 292.0
+offset_bottom = 39.0
+placeholder_text = "Enter playlist name..."
+
+[node name="ChoosePlaylistDialog" type="ConfirmationDialog" parent="."]
+title = "Choose Playlist"
+size = Vector2i(300, 200)
+visible = false
+
+[node name="ItemList" type="ItemList" parent="ChoosePlaylistDialog"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 292.0
+offset_bottom = 155.0
+
+[node name="FolderChoiceDialog" type="ConfirmationDialog" parent="."]
+title = "Choose Folder"
+size = Vector2i(350, 180)
+visible = false
+ok_button_text = "Browse..."
+
+[node name="VBoxContainer" type="VBoxContainer" parent="FolderChoiceDialog"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 342.0
+offset_bottom = 135.0
+
+[node name="Label" type="Label" parent="FolderChoiceDialog/VBoxContainer"]
+layout_mode = 2
+text = "Where would you like to browse for music?"
+
+[node name="OfficialSongsButton" type="Button" parent="FolderChoiceDialog/VBoxContainer"]
+layout_mode = 2
+text = "Official Songs"
+
+[node name="EditorFolderButton" type="Button" parent="FolderChoiceDialog/VBoxContainer"]
+layout_mode = 2
+text = "Editor Songs"
+
+[node name="WorkshopFolderButton" type="Button" parent="FolderChoiceDialog/VBoxContainer"]
+layout_mode = 2
+text = "Steam Workshop"
+
+[node name="OfficialSongsDialog" type="ConfirmationDialog" parent="."]
+title = "Select Official Songs"
+size = Vector2i(400, 400)
+visible = false
+ok_button_text = "Add Selected"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OfficialSongsDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -40.0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="OfficialSongsDialog/VBoxContainer"]
+layout_mode = 2
+
+[node name="SelectAllButton" type="Button" parent="OfficialSongsDialog/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Select All"
+
+[node name="SelectNoneButton" type="Button" parent="OfficialSongsDialog/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Select None"
+
+[node name="OfficialSongsList" type="ItemList" parent="OfficialSongsDialog/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+select_mode = 1
 
 [node name="PlayerPanel" type="PanelContainer" parent="MainContainer"]
 layout_mode = 2
@@ -138,6 +235,11 @@ text = "🔁"
 
 [node name="BottomControls" type="HBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer"]
 layout_mode = 2
+
+[node name="PlayInGameButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/BottomControls"]
+layout_mode = 2
+tooltip_text = "Play this song in the game"
+text = "🎮 Play"
 
 [node name="Spacer" type="Control" parent="MainContainer/PlayerPanel/VBoxContainer/BottomControls"]
 layout_mode = 2
