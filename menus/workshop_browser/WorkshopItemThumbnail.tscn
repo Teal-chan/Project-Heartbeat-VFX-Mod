@@ -1,0 +1,230 @@
+[gd_scene load_steps=11 format=3 uid="uid://cvopeb3crui87"]
+
+[ext_resource type="Script" uid="uid://bevllte26ppax" path="res://menus/workshop_browser/WorkshopItemThumbnail.gd" id="1"]
+[ext_resource type="StyleBox" uid="uid://b21324ii6ky3l" path="res://styles/PanelStyleTransparentIcon.tres" id="5"]
+[ext_resource type="Texture2D" uid="uid://cakqpc84jlapb" path="res://graphics/icons/check-circle.svg" id="6"]
+[ext_resource type="Texture2D" uid="uid://6phu22pv2pdj" path="res://graphics/icons/5-star.png" id="7"]
+[ext_resource type="Texture2D" uid="uid://7g6fr4u55qd8" path="res://graphics/icons/0-star.png" id="8"]
+[ext_resource type="Texture2D" uid="uid://cqsegv1wyr5o7" path="res://graphics/icons/menu_star.png" id="10"]
+
+[sub_resource type="StyleBoxFlat" id="1"]
+content_margin_left = 7.0
+content_margin_top = 7.0
+content_margin_right = 7.0
+content_margin_bottom = 7.0
+bg_color = Color(0.19, 0.07, 0.3, 0.75)
+border_color = Color(1, 1, 1, 0.501961)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 10
+
+[sub_resource type="Shader" id="3"]
+code = "shader_type canvas_item;
+
+uniform float radius = 10.0;
+
+void fragment() {
+	vec4 new_color = texture(TEXTURE, UV);
+	vec2 pixel_size = TEXTURE_PIXEL_SIZE;
+
+	new_color += texture(TEXTURE, UV + vec2(0, -radius) * pixel_size);
+	new_color += texture(TEXTURE, UV + vec2(0, radius) * pixel_size);
+	new_color += texture(TEXTURE, UV + vec2(-radius, 0) * pixel_size);
+	new_color += texture(TEXTURE, UV + vec2(radius, 0) * pixel_size);
+	
+	COLOR = new_color / 5.0;
+	
+	COLOR.a -= 1.0 - smoothstep(0.1, 0.2, UV.x) * step(0.1, UV.x);
+	COLOR.a -= 1.0 - smoothstep(1.0, 0.8, UV.x);
+}"
+
+[sub_resource type="ShaderMaterial" id="4"]
+shader = SubResource("3")
+shader_parameter/radius = 2.0
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_lgw14"]
+color = Color(1, 1, 1, 1)
+grow_begin = -2.0
+grow_end = -2.0
+thickness = 2
+vertical = true
+
+[node name="Control2" type="Button"]
+custom_minimum_size = Vector2(0, 100)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -980.0
+size_flags_horizontal = 3
+focus_mode = 0
+theme_override_styles/hover = SubResource("1")
+theme_override_styles/normal = ExtResource("5")
+script = ExtResource("1")
+
+[node name="TextureRect" type="TextureRect" parent="."]
+self_modulate = Color(1, 1, 1, 0.25)
+material = SubResource("4")
+layout_mode = 0
+anchor_left = 0.15
+anchor_right = 0.85
+anchor_bottom = 1.0
+expand_mode = 1
+stretch_mode = 7
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Panel" type="ColorRect" parent="MarginContainer/HBoxContainer/TextureRect"]
+custom_minimum_size = Vector2(40, 40)
+layout_mode = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -40.0
+offset_top = -40.0
+color = Color(0, 0, 0, 0.75)
+
+[node name="TextureRect" type="TextureRect" parent="MarginContainer/HBoxContainer/TextureRect/Panel"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("6")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = -5
+
+[node name="Label" type="HBoxContainer" parent="MarginContainer/HBoxContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 7
+size_flags_stretch_ratio = 0.15
+
+[node name="RomanizedTitleLabel" type="Label" parent="MarginContainer/HBoxContainer/VBoxContainer/VBoxContainer/Label"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 7
+size_flags_stretch_ratio = 0.15
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "asdadsadsadada"
+
+[node name="TitleSeparator" type="VSeparator" parent="MarginContainer/HBoxContainer/VBoxContainer/VBoxContainer/Label"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_lgw14")
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/HBoxContainer/VBoxContainer/VBoxContainer/Label"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 7
+size_flags_stretch_ratio = 0.15
+text = "ds"
+text_overrun_behavior = 3
+
+[node name="Label2" type="Label" parent="MarginContainer/HBoxContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 7
+size_flags_stretch_ratio = 0.15
+
+; ---- NEW: VFX badge column (between titles and note-usage icons) ----
+[node name="VFXBadge" type="Label" parent="MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+horizontal_alignment = 2
+vertical_alignment = 1
+visible = false
+theme_override_colors/font_color = Color(1, 0.95, 0.4, 1)
+text = "VFX"
+; -------------------------------------------------------------
+
+[node name="NoteUsageContainer" type="VBoxContainer" parent="MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(75, 0)
+layout_mode = 2
+size_flags_horizontal = 8
+alignment = 1
+
+
+[node name="ArcadeTextureRect" type="TextureRect" parent="MarginContainer/HBoxContainer/NoteUsageContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ConsoleTextureRect" type="TextureRect" parent="MarginContainer/HBoxContainer/NoteUsageContainer"]
+unique_name_in_owner = true
+auto_translate_mode = 1
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+alignment = 1
+
+[node name="DifficultyPanel" type="HBoxContainer" parent="MarginContainer/HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="MarginContainer/HBoxContainer/VBoxContainer2/DifficultyPanel"]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+texture = ExtResource("10")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="DifficultyLabel" type="Label" parent="MarginContainer/HBoxContainer/VBoxContainer2/DifficultyPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "x10-x10"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="Stars" type="TextureProgressBar" parent="MarginContainer/HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.0
+value = 0.5
+texture_under = ExtResource("8")
+texture_progress = ExtResource("7")
