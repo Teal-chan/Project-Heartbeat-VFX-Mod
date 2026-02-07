@@ -293,6 +293,7 @@ This project exists thanks to the openness of EirTeam in making Project Heartbea
 ### Planned Features
 
 - Bezier curve support for Offset, Mirai Link and possibly Field Slide
+- Technical Zones (Signal hook and counter complete, tech zone scoring and behavior coming soon.)
 - YouTube tutorial series
 
 ### Reporting Issues
