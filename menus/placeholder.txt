@@ -1,0 +1,2 @@
+This folder contains:
+BackgroundMusicPlayer.gd, MainMenu.gd, and RandomQuote.gd
