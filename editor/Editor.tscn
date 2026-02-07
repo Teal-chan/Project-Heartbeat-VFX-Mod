@@ -1,0 +1,708 @@
+[gd_scene load_steps=44 format=3 uid="uid://fawgnyddv8a"]
+
+[ext_resource type="PackedScene" uid="uid://b3peah64ej2iw" path="res://menus/visualizer/Visualizer.tscn" id="1"]
+[ext_resource type="PackedScene" uid="uid://c0p0ql3vtldti" path="res://rythm_game/game_modes/heartbeat/HeartbeatRhythmGameUI.tscn" id="2"]
+[ext_resource type="Script" uid="uid://b2rr6kksfb8wp" path="res://tools/editor/Editor.gd" id="3"]
+[ext_resource type="Theme" uid="uid://4xcdimhfc2hy" path="res://default_theme_tools.tres" id="4"]
+[ext_resource type="Script" uid="uid://dfk1epswa3u3e" path="res://tools/editor/EditorGamePreview.gd" id="5"]
+[ext_resource type="Script" uid="uid://c3awnkmskmy31" path="res://tools/editor/EditorBottomBar.gd" id="6"]
+[ext_resource type="PackedScene" uid="uid://cubtw5u6jiuth" path="res://tools/editor/EditorRhythmGamePopup.tscn" id="7"]
+[ext_resource type="FontFile" uid="uid://dkdc6i25as00" path="res://fonts/Roboto-Black.ttf" id="8"]
+[ext_resource type="Texture2D" uid="uid://dhk4eaf1a04en" path="res://tools/icons/icon_load.svg" id="9"]
+[ext_resource type="PackedScene" uid="uid://bbf5jr2js4svr" path="res://tools/editor/EditorOpenChartPopup.tscn" id="10"]
+[ext_resource type="PackedScene" uid="uid://b20gtbvpc71r" path="res://tools/editor/EditorTimeline.tscn" id="11"]
+[ext_resource type="Texture2D" uid="uid://6540wsogtapo" path="res://tools/icons/waveform.svg" id="12"]
+[ext_resource type="Texture2D" uid="uid://eb8my2awc1kw" path="res://graphics/icons/music.svg" id="13"]
+[ext_resource type="Texture2D" uid="uid://c0fe7cjb2bknm" path="res://tools/icons/icon_save.svg" id="14"]
+[ext_resource type="Texture2D" uid="uid://cc1bjd6rlmwy5" path="res://tools/icons/icon_pause.svg" id="16"]
+[ext_resource type="Texture2D" uid="uid://diqom3jw5b5s0" path="res://tools/icons/gamepad-variant.svg" id="17"]
+[ext_resource type="Texture2D" uid="uid://l36o42nwrfnr" path="res://tools/icons/icon_back.svg" id="18"]
+[ext_resource type="Script" uid="uid://cn0kf6eh358jo" path="res://tools/editor/GridRenderer.gd" id="19"]
+[ext_resource type="Texture2D" uid="uid://c4mm12pqy2rlk" path="res://tools/icons/icon_play.svg" id="20"]
+[ext_resource type="Script" uid="uid://cqk5pedx2vn27" path="res://tools/editor/WidgetArea.gd" id="21"]
+[ext_resource type="Script" uid="uid://b06kp7o87nsq7" path="res://tools/editor/controls/HBEditorSimpleButton.gd" id="22"]
+[ext_resource type="Texture2D" uid="uid://4n5ul7evfpul" path="res://tools/icons/settings.svg" id="23"]
+[ext_resource type="Texture2D" uid="uid://3uy0cfhna545" path="res://tools/icons/VideoPlayer.svg" id="23_rurvd"]
+[ext_resource type="Texture2D" uid="uid://b5xq42tyjw82p" path="res://tools/icons/Help.svg" id="24"]
+[ext_resource type="PackedScene" uid="uid://deyiv4k2u7l01" path="res://tools/editor/SongSelectorDialog.tscn" id="25"]
+[ext_resource type="Texture2D" uid="uid://csrcioil1qbjp" path="res://tools/icons/gamepad-time.svg" id="26"]
+[ext_resource type="Texture2D" uid="uid://d3pubgnckbmam" path="res://tools/icons/TextureRect.svg" id="27"]
+[ext_resource type="Texture2D" uid="uid://c42texa0yanux" path="res://tools/icons/icon_grid.svg" id="28"]
+[ext_resource type="Texture2D" uid="uid://ceim7qh5vd4g2" path="res://graphics/icons/save_plus.svg" id="29"]
+[ext_resource type="PackedScene" uid="uid://b8lwp32xk453o" path="res://tools/editor/EditorGlobalSettings.tscn" id="30"]
+[ext_resource type="PackedScene" path="res://tools/editor/EditorInspector.tscn" id="31"]
+[ext_resource type="PackedScene" uid="uid://b3m6my0plq6gk" path="res://tools/editor/transformation_display/TransformationDisplay.tscn" id="32"]
+[ext_resource type="Script" uid="uid://bq8bs6k8ynegi" path="res://rythm_game/game_modes/heartbeat/RhythmGameHeartbeat.gd" id="33"]
+[ext_resource type="Texture2D" uid="uid://be35kgs7xupk1" path="res://tools/icons/icon_snap_grid.svg" id="34"]
+[ext_resource type="Script" uid="uid://d15ocawamixq3" path="res://tools/editor/EditorContextualMenuControl.gd" id="35"]
+[ext_resource type="Script" uid="uid://xyqqpxe7hfx2" path="res://rythm_game/SongBackground.gd" id="36"]
+[ext_resource type="Texture2D" uid="uid://ccyvxr16477o5" path="res://tools/icons/icon_GUI_visibility_visible.svg" id="37"]
+[ext_resource type="Script" uid="uid://cf333d0edlxk7" path="res://tools/editor/MessageShower.gd" id="43"]
+[ext_resource type="Script" uid="uid://clphuuunv7ko1" path="res://tools/editor/controls/HBEditorSpinBox.gd" id="50"]
+[ext_resource type="Script" uid="uid://bktl5vdwskklo" path="res://rythm_game/VideoPlayerOffset.gd" id="51"]
+
+
+[sub_resource type="StyleBoxFlat" id="12"]
+bg_color = Color(0.2, 0.231373, 0.309804, 1)
+
+[sub_resource type="FontFile" id="11"]
+fallbacks = Array[Font]([ExtResource("8")])
+cache/0/16/0/ascent = 0.0
+cache/0/16/0/descent = 0.0
+cache/0/16/0/underline_position = 0.0
+cache/0/16/0/underline_thickness = 0.0
+cache/0/16/0/scale = 1.0
+cache/0/16/0/kerning_overrides/16/0 = Vector2(0, 0)
+
+[sub_resource type="StyleBoxFlat" id="13"]
+bg_color = Color(0.14902, 0.172549, 0.231373, 1)
+border_width_top = 1
+border_color = Color(0.541176, 0.541176, 0.541176, 1)
+
+[node name="Editor" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("4")
+script = ExtResource("3")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel2" type="Panel" parent="VBoxContainer"]
+self_modulate = Color(1, 1, 1, 0.25)
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+size_flags_vertical = 5
+theme_override_styles/panel = SubResource("12")
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/Panel2"]
+layout_mode = 0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_top = -22.5
+offset_bottom = 22.5
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/Panel2/MarginContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ExitButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+icon = ExtResource("18")
+flat = true
+
+[node name="OpenButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer" groups=["disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Open a chart"
+icon = ExtResource("9")
+flat = true
+script = ExtResource("22")
+action = "editor_open"
+
+[node name="OpenSongMetaButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Edit song data for current song"
+flat = true
+script = ExtResource("22") # HBEditorSimpleButton.gd
+action = "editor_open_song_meta"
+
+[node name="VerifySongButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Verify current song"
+flat = true
+script = ExtResource("22") # HBEditorSimpleButton.gd
+action = "editor_verify_song"
+
+[node name="UploadSongButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Upload current song"
+flat = true
+script = ExtResource("22")
+action = ""
+
+[node name="SaveButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer" groups=["disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Save a chart"
+disabled = true
+icon = ExtResource("14")
+flat = true
+script = ExtResource("22")
+action = "editor_save"
+
+[node name="SaveAsButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer" groups=["disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Save chart as"
+icon = ExtResource("29")
+flat = true
+script = ExtResource("22")
+action = "editor_save_as"
+
+[node name="CurrentTitleButton" type="Label" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 2
+
+[node name="OpenExternalButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui"]]
+layout_mode = 2
+tooltip_text = "Open chart JSON in external editor"
+flat = false
+script = ExtResource("22")
+action = ""
+
+[node name="IconPackButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui"]]
+layout_mode = 2
+tooltip_text = "Select icon pack"
+flat = false
+
+[node name="PlaytestButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["disabled_ui"]]
+layout_mode = 2
+tooltip_text = "Play the chart"
+icon = ExtResource("17")
+script = ExtResource("22")
+action = "editor_playtest"
+
+[node name="PlaytestAtTimeButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Play the chart from the current time"
+icon = ExtResource("26")
+script = ExtResource("22")
+action = "editor_playtest_at_time"
+
+[node name="VSeparator3" type="VSeparator" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="PlayButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Play preview"
+icon = ExtResource("20")
+flat = true
+script = ExtResource("22")
+action = "editor_play"
+
+[node name="PauseButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+visible = false
+layout_mode = 2
+tooltip_text = "Pause preview"
+icon = ExtResource("16")
+flat = true
+script = ExtResource("22")
+action = "editor_play"
+
+[node name="VSeparator4" type="VSeparator" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="EditorHelpButton" type="MenuButton" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui"]]
+layout_mode = 2
+tooltip_text = "Editor manual"
+icon = ExtResource("24")
+item_count = 2
+popup/item_0/text = "Editor manual"
+popup/item_0/id = 0
+popup/item_1/text = "Community charting guide"
+popup/item_1/id = 1
+
+[node name="EditorSettingsPopupButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Editor settings"
+icon = ExtResource("23")
+flat = true
+script = ExtResource("22")
+action = "editor_settings"
+
+[node name="SexButton" type="Button" parent="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer" groups=["extended_disabled_ui"]]
+visible = false
+layout_mode = 2
+text = "Sex"
+
+[node name="VSplitContainer" type="VSplitContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="HSplitContainer" type="HSplitContainer" parent="VBoxContainer/VSplitContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 320
+
+[node name="Control" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.3
+
+[node name="TabContainer2" type="TabContainer" parent="VBoxContainer/VSplitContainer/HSplitContainer/Control"]
+self_modulate = Color(1, 1, 1, 0.5)
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -1.33484
+offset_bottom = -1.33484
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.25
+
+[node name="HSplitContainer" type="HSplitContainer" parent="VBoxContainer/VSplitContainer/HSplitContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+split_offset = -250
+
+[node name="Preview" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="GamePreview" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview"]
+clip_contents = true
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("5")
+
+[node name="Node2D" type="Node2D" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview"]
+z_index = -2
+
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 6
+script = ExtResource("36")
+
+[node name="VideoStreamPlayer" type="VideoStreamPlayer" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D"]
+visible = false
+offset_right = 40.0
+offset_bottom = 40.0
+expand = true
+script = ExtResource("51")
+metadata/_edit_use_anchors_ = true
+
+[node name="Visualizer" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D" instance=ExtResource("1")]
+mouse_filter = 2
+
+[node name="GridRenderer" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("19")
+
+[node name="WidgetArea" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 1195.0
+offset_bottom = 680.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("21")
+
+[node name="Panel" type="Panel" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea"]
+self_modulate = Color(1, 1, 1, 0.5)
+layout_mode = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -374.0
+offset_top = -28.0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -1.00006
+theme = ExtResource("4")
+
+[node name="WaveformButton" type="Button" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Toggle waveform"
+toggle_mode = true
+icon = ExtResource("12")
+flat = true
+script = ExtResource("22")
+action = "editor_toggle_waveform"
+
+[node name="SfxButton" type="Button" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Toggle hitsound sfx"
+toggle_mode = true
+icon = ExtResource("13")
+flat = true
+icon_alignment = 1
+script = ExtResource("22")
+action = "editor_toggle_sfx"
+
+[node name="ShowBGButton" type="Button" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Show background image"
+toggle_mode = true
+icon = ExtResource("27")
+flat = true
+script = ExtResource("22")
+action = "editor_toggle_bg"
+
+[node name="ShowVideoButton" type="Button" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Show video"
+toggle_mode = true
+icon = ExtResource("23_rurvd")
+flat = true
+script = ExtResource("22")
+action = "editor_toggle_video"
+
+[node name="ShowGridbutton" type="Button" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Show grid"
+toggle_mode = true
+icon = ExtResource("28")
+flat = true
+script = ExtResource("22")
+action = "editor_grid"
+
+[node name="GridSnapButton" type="Button" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Snap to grid"
+toggle_mode = true
+icon = ExtResource("34")
+flat = true
+script = ExtResource("22")
+action = "editor_grid_snap"
+
+[node name="Label" type="Label" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer"]
+layout_mode = 2
+text = "x:"
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui"]]
+layout_mode = 2
+min_value = 1.0
+max_value = 368.0
+value = 48.0
+suffix = "px"
+script = ExtResource("50")
+
+[node name="Label2" type="Label" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer"]
+layout_mode = 2
+text = "y:"
+
+[node name="SpinBox2" type="SpinBox" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer" groups=["extended_disabled_ui"]]
+layout_mode = 2
+min_value = 1.0
+max_value = 368.0
+value = 48.0
+suffix = "px"
+script = ExtResource("50")
+
+[node name="RythmGameUI" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview" instance=ExtResource("2")]
+layout_mode = 1
+mouse_filter = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview"]
+visible = false
+layout_mode = 0
+offset_right = 8.0
+offset_bottom = 31.0
+
+[node name="RhythmGame" type="Node" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview"]
+script = ExtResource("33")
+
+[node name="TransformPreview" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview" instance=ExtResource("32")]
+clip_contents = true
+layout_mode = 1
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MessageShower" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview"]
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("43")
+font = SubResource("11")
+
+[node name="Control2" type="Control" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer"]
+layout_mode = 2
+size_flags_stretch_ratio = 0.3
+
+[node name="TabContainer" type="TabContainer" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Control2"]
+self_modulate = Color(1, 1, 1, 0.5)
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+current_tab = 0
+
+[node name="Inspector" parent="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Control2/TabContainer" instance=ExtResource("31")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.3
+metadata/_tab_index = 0
+
+[node name="EditorTimelineContainer" type="Panel" parent="VBoxContainer/VSplitContainer"]
+self_modulate = Color(1, 1, 1, 0)
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.5
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/separation = 0
+
+[node name="EditorTimeline" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer" instance=ExtResource("11")]
+self_modulate = Color(1, 1, 1, 1)
+custom_minimum_size = Vector2(0, 0)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Panel" type="Panel" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 35)
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.1
+theme_override_styles/panel = SubResource("13")
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_right = 5
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer"]
+layout_mode = 2
+script = ExtResource("6")
+
+[node name="LayerVisibilityButton" type="Button" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Edit Layer visibility."
+icon = ExtResource("37")
+flat = true
+script = ExtResource("22")
+action = "editor_popup_visibility_editor"
+
+[node name="VSeparator2" type="VSeparator" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="TimelineGridSnapButton" type="Button" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer" groups=["extended_disabled_ui", "update_shortcuts"]]
+layout_mode = 2
+tooltip_text = "Enable timeline snap"
+toggle_mode = true
+icon = ExtResource("34")
+flat = true
+script = ExtResource("22")
+action = "editor_timeline_snap"
+
+[node name="GridResolutionOptionButton" type="OptionButton" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "Separation between notes, as a
+fraction of a whole note."
+
+[node name="VSeparator3" type="VSeparator" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="PlaybackSpeedSlider" type="HSlider" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_vertical = 1
+tooltip_text = "Set the playback speed 
+(Greater than 1x is faster, 
+lesser is slower)."
+min_value = 0.25
+max_value = 1.75
+step = 0.05
+value = 1.0
+tick_count = 7
+ticks_on_borders = true
+
+[node name="PlaybackSpeedLabel" type="Label" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "x1.00"
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 2
+
+[node name="InfoLabel" type="Label" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Timing points 0/100"
+
+[node name="VSeparator" type="VSeparator" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="VersionLabel" type="Label" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/HBoxContainer"]
+visible = false
+layout_mode = 2
+text = "Project Kokoro Doki UwU"
+
+[node name="VSeparator2" type="VSeparator" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/HBoxContainer"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="FPSLabel" type="Label" parent="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="Popups" type="CanvasLayer" parent="."]
+
+[node name="SaveAsSongSelector" parent="Popups" groups=["block_shortcuts"] instance=ExtResource("25")]
+save_mode = 1
+
+[node name="SaveConfirmationDialog" type="ConfirmationDialog" parent="Popups" groups=["block_shortcuts"]]
+unique_name_in_owner = true
+theme = ExtResource("4")
+dialog_text = "This chart has unsaved changes.
+Any unsaved progress will be lost."
+dialog_autowrap = true
+
+[node name="OpenChartPopupDialog" parent="Popups" groups=["block_shortcuts"] instance=ExtResource("10")]
+
+[node name="PluginErrorDialog" type="AcceptDialog" parent="Popups" groups=["block_shortcuts"]]
+dialog_text = "Plugin ERROR!"
+dialog_autowrap = true
+
+[node name="FirstTimeMessageDialog" type="AcceptDialog" parent="Popups" groups=["block_shortcuts"]]
+theme = ExtResource("4")
+
+[node name="Label2" type="VBoxContainer" parent="Popups/FirstTimeMessageDialog"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 400.0
+offset_bottom = 144.0
+
+[node name="Label" type="Label" parent="Popups/FirstTimeMessageDialog/Label2"]
+layout_mode = 2
+text = "This appears to be your first time using the editor, here are some resources you might find useful:"
+
+[node name="LinkButton" type="LinkButton" parent="Popups/FirstTimeMessageDialog/Label2"]
+layout_mode = 2
+text = "Community charting guide"
+
+[node name="LinkButton2" type="LinkButton" parent="Popups/FirstTimeMessageDialog/Label2"]
+layout_mode = 2
+focus_mode = 2
+text = "Editor manual"
+
+[node name="Label2" type="Label" parent="Popups/FirstTimeMessageDialog/Label2"]
+layout_mode = 2
+text = "You can find these again by clicking in the book icon on the top right corner of the editor!"
+
+[node name="EditorGlobalSettings" parent="Popups" groups=["block_shortcuts"] instance=ExtResource("30")]
+unique_name_in_owner = true
+visible = false
+
+[node name="SexDialog" type="AcceptDialog" parent="Popups" groups=["block_shortcuts"]]
+theme = ExtResource("4")
+dialog_text = "You're not allowed to cum
+inside Rin Kagamine."
+
+[node name="ContextualMenu" type="PopupMenu" parent="Popups"]
+unique_name_in_owner = true
+theme = ExtResource("4")
+script = ExtResource("35")
+
+[node name="NoTimingMapDialog" type="AcceptDialog" parent="Popups"]
+unique_name_in_owner = true
+size = Vector2i(877, 132)
+theme = ExtResource("4")
+dialog_text = "This chart has no tempo map.
+Please create a timing change before adding notes."
+dialog_autowrap = true
+
+[node name="RhythmGamePlaytestPopup" parent="." instance=ExtResource("7")]
+visible = false
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+grow_horizontal = 1
+grow_vertical = 1
+
+[node name="FocusTrap" type="Control" parent="."]
+anchors_preset = 0
+focus_mode = 2
+mouse_filter = 2
+
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/ExitButton" to="." method="try_exit"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/OpenButton" to="." method="try_open"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/SaveButton" to="." method="_on_SaveButton_pressed"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/SaveAsButton" to="Popups/SaveAsSongSelector" method="_popup"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/OpenSongMetaButton" to="." method="_on_OpenSongMetaButton_pressed"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/VerifySongButton" to="." method="_on_VerifySongButton_pressed"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer/PlaytestButton" to="." method="_on_PlaytestButton_pressed" binds= [false]]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer/PlaytestAtTimeButton" to="." method="_on_PlaytestButton_pressed" binds= [true]]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer/PlayButton" to="." method="_on_PlayButton_pressed"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer/PauseButton" to="." method="_on_PauseButton_pressed"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer/EditorSettingsPopupButton" to="." method="_toggle_settings_popup"]
+[connection signal="pressed" from="VBoxContainer/Panel2/MarginContainer/VBoxContainer/HBoxContainer/HBoxContainer/SexButton" to="." method="_on_SexButton_pressed"]
+[connection signal="dragged" from="VBoxContainer/VSplitContainer" to="." method="_on_VSplitContainer_dragged"]
+[connection signal="dragged" from="VBoxContainer/VSplitContainer/HSplitContainer" to="." method="_on_left_HSplitContainer_dragged"]
+[connection signal="dragged" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer" to="." method="_on_right_HSplitContainer_dragged"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/WaveformButton" to="." method="_on_WaveformButton_toggled"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/SfxButton" to="." method="_on_Sfx_toggled"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/ShowBGButton" to="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview" method="show_bg"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/ShowVideoButton" to="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview" method="show_video"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/ShowGridbutton" to="." method="_on_ShowGridbutton_toggled"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/GridSnapButton" to="." method="_on_GridSnapButton_toggled"]
+[connection signal="value_changed" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/SpinBox" to="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/GridRenderer" method="set_horizontal"]
+[connection signal="value_changed" from="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/WidgetArea/Panel/HBoxContainer/SpinBox2" to="VBoxContainer/VSplitContainer/HSplitContainer/HSplitContainer/Preview/GamePreview/Node2D/GridRenderer" method="set_vertical"]
+[connection signal="pressed" from="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/LayerVisibilityButton" to="." method="_toggle_layer_visibility_editor"]
+[connection signal="toggled" from="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/TimelineGridSnapButton" to="." method="_on_TimelineGridSnapButton_toggled"]
+[connection signal="item_selected" from="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/GridResolutionOptionButton" to="." method="set_resolution"]
+[connection signal="value_changed" from="VBoxContainer/VSplitContainer/EditorTimelineContainer/VBoxContainer/Panel/MarginContainer/HBoxContainer/PlaybackSpeedSlider" to="." method="_on_PlaybackSpeedSlider_value_changed"]
+[connection signal="about_to_popup" from="Popups/SaveAsSongSelector" to="." method="obscure_ui"]
+[connection signal="canceled" from="Popups/SaveAsSongSelector" to="." method="reveal_ui"]
+[connection signal="chart_selected" from="Popups/SaveAsSongSelector" to="." method="_on_SaveSongSelector_chart_selected"]
+[connection signal="close_requested" from="Popups/SaveAsSongSelector" to="." method="reveal_ui"]
+[connection signal="confirmed" from="Popups/SaveAsSongSelector" to="." method="reveal_ui"]
+[connection signal="about_to_popup" from="Popups/SaveConfirmationDialog" to="." method="obscure_ui"]
+[connection signal="confirmed" from="Popups/SaveConfirmationDialog" to="." method="_on_SaveConfirmationDialog_confirmed"]
+[connection signal="about_to_popup" from="Popups/OpenChartPopupDialog" to="." method="obscure_ui"]
+[connection signal="about_to_popup" from="Popups/PluginErrorDialog" to="." method="obscure_ui"]
+[connection signal="about_to_popup" from="Popups/FirstTimeMessageDialog" to="." method="obscure_ui"]
+[connection signal="pressed" from="Popups/FirstTimeMessageDialog/Label2/LinkButton" to="." method="open_link" binds= ["https://steamcommunity.com/sharedfiles/filedetails/?id=2465841098"]]
+[connection signal="pressed" from="Popups/FirstTimeMessageDialog/Label2/LinkButton2" to="." method="open_link" binds= ["https://steamcommunity.com/sharedfiles/filedetails/?id=2048893718"]]
+[connection signal="about_to_popup" from="Popups/EditorGlobalSettings" to="." method="obscure_ui"]
+[connection signal="close_requested" from="Popups/EditorGlobalSettings" to="." method="reveal_ui"]
+[connection signal="about_to_popup" from="Popups/SexDialog" to="." method="obscure_ui"]
+[connection signal="about_to_popup" from="Popups/NoTimingMapDialog" to="." method="obscure_ui"]
+[connection signal="canceled" from="Popups/NoTimingMapDialog" to="." method="reveal_ui"]
+[connection signal="close_requested" from="Popups/NoTimingMapDialog" to="." method="guide_user_to_timing_changes"]
+[connection signal="confirmed" from="Popups/NoTimingMapDialog" to="." method="guide_user_to_timing_changes"]
