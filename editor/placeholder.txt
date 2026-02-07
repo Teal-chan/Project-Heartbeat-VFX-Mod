@@ -1,0 +1,2 @@
+This folder contains:
+Editor.gd, EditorInspector.gd, EditorLayer.gd, EditorTimeline.gd, WorkshopUploadForm.gd, and WorkshopUploadForm.tscn.
