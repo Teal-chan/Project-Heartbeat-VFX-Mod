@@ -1,5 +1,5 @@
 
-<img width="1461" height="761" alt="Logo" src="https://github.com/user-attachments/assets/d0781567-ae6b-4442-b620-d434e88e9997" />
+<img width="1376" height="674" alt="Blank Logo Base" src="https://github.com/user-attachments/assets/cb0cc676-b7ee-41f0-99d7-71705be7da22" />
 
 <img width="189" height="208" alt="scale" src="https://github.com/user-attachments/assets/629e8d95-0b73-4d3b-a8ec-a1533977b883" />
 <img width="165" height="201" alt="color" src="https://github.com/user-attachments/assets/c738a7fa-f767-416a-80e3-c31c74a2280f" />
