@@ -307,6 +307,13 @@ Please include:
 
 ---
 
+## ⚠️ CAVEAT EMPTOR!
+
+This mod contains amateur, untested, AI-generated code. It was made purely in the spirit of tinkering with the game,
+and my 'careful' code review doesn't indicate anything that would harm your computer, but I am still using this 
+software at my own risk, which means you are as well, if you choose to. This is *not* the official game in any
+capacity - it is a mod that requires a legally purchased copy of the game to work. 
+
 ## 📜 Credits
 
 - **An Idol in Teal (Josh)** — Primary developer
