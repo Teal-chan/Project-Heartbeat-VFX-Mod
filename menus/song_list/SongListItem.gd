@@ -43,6 +43,10 @@ var song_update_queued := false
 signal difficulty_selected(song: HBSong, difficulty: String)
 signal unsubscribe_requested(song: HBSong)
 signal demo_locked_song_selected(song: HBSong)
+signal favorite_toggled(song: HBSong)
+
+var _is_favorite: bool = false
+var favorite_button: Button = null
 
 func _queue_song_update():
 	if not song_update_queued:
@@ -161,6 +165,9 @@ func _ready():
 	set_process_input(true)
 	interpolated_scale = NON_HOVERED_SCALE
 	unsubscribe_button.pressed.connect(_on_unsubscribe_requested_pressed)
+	
+	# PH Extend: Favorite button (top-right, next to VFX indicator)
+	_create_favorite_button()
 	
 	get_parent().sort_children.connect(
 		func(): 
@@ -301,3 +308,40 @@ func _on_pressed():
 			select_diff(tag.difficulty)
 			break
 	set_process_input(true)
+
+# --- PH Extend: Favorites ---
+func _create_favorite_button():
+	favorite_button = Button.new()
+	favorite_button.name = "FavoriteButton"
+	favorite_button.focus_mode = Control.FOCUS_ALL
+	favorite_button.flat = true
+	favorite_button.custom_minimum_size = Vector2(40, 30)
+	_update_favorite_display()
+	favorite_button.pressed.connect(_on_favorite_pressed)
+
+	# Place it next to the VFX indicator in the top-right area
+	var fav_container := HBoxContainer.new()
+	fav_container.name = "FavoriteContainer"
+	fav_container.layout_mode = 1
+	fav_container.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	fav_container.offset_left = -50.0
+	fav_container.offset_top = 8.0
+	fav_container.offset_right = -2.0
+	fav_container.offset_bottom = 38.0
+	fav_container.add_child(favorite_button)
+	button.add_child(fav_container)
+
+func _on_favorite_pressed():
+	favorite_toggled.emit(song)
+
+func set_favorite(is_fav: bool):
+	_is_favorite = is_fav
+	_update_favorite_display()
+
+func _update_favorite_display():
+	if favorite_button:
+		favorite_button.text = "★" if _is_favorite else "☆"
+		if _is_favorite:
+			favorite_button.add_theme_color_override("font_color", Color(1.0, 0.85, 0.0, 1.0))
+		else:
+			favorite_button.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 0.8))
