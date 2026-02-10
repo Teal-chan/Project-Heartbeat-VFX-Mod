@@ -47,6 +47,7 @@ Quality-of-life improvements that streamline the charting workflow:
 ### 🎮 New Gameplay Features
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
 - **VFX indicators**: See which songs have VFX before playing
+- **Additional Category Tabs**: Song list now includes 'Extend' and 'Favorites' tabs, with an 'Add to Favorites' option on every song list item
 - **Media Player**: Play any song in your Project Heartbeat library (Audio only)
 - **Editor Metadata Layer**: A new 'Metadata' layer is available in the Editor, for custom timing points (script signals!)
 
