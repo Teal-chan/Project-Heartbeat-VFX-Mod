@@ -33,6 +33,7 @@ A complete visual effects authoring suite that rivals Project Diva's modchart ca
 - **Mirai-style link lines**: Connect notes visually like Project Mirai
 - **Real-time preview**: See effects as you author them
 - **Leaderboard legal**: All VFX are purely cosmetic—scores still count! (This is a back end modification to 'whitelist' certain modifiers.)
+- **Optimized for Steam Deck**: Shaders now optimized for integrated GPU.
 
 ### 🛠️ Editor Enhancements
 Quality-of-life improvements that streamline the charting workflow:
@@ -59,7 +60,7 @@ Quality-of-life improvements that streamline the charting workflow:
 
 1. Browse your Local Files, find the "Project Heartbeat.pck" file, make a copy and back it up
 2. Replace it with the modded version here: https://drive.google.com/file/d/1gSJrkXsBo-cheNugu686usfIhjuAn9mD/view?usp=sharing
-3. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1gz9GFCSqnMsNbNOyBmmpixi1ylXfNN4A/view?usp=sharing
+3. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1WwL2mP1TkAEoC2WvV0nF0oYo2Y6yq11S/view?usp=sharing
 3. Launch the game normally (Or preferably, from command prompt/terminal to see the console outputs)
 
 ---
