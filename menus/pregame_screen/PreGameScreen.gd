@@ -23,6 +23,23 @@ const BASE_HEIGHT = 720.0
 # NEW: preload PHVFX modifier script so we can stamp its static context
 const PHVFXModifier = preload("res://rythm_game/modifiers/ph_vfx/ph_vfx.gd")
 
+# ── Resource pack selector ──
+const PREFERRED_PACK_ORDER = [
+	"default_skin",
+	"nintendo",
+	"playstation",
+	"xbox",
+	"vfxfriendly_icons_for_nintendo",
+	"vfxfriendly_icons_for_xboxsteam_deck",
+	"whitegrayscale_icons_for_vfx"
+]
+const SKIN_PACK_KEYS := {
+	"default_skin": true,
+	"nintendo": true,
+	"playstation": true,
+	"xbox": true,
+}
+
 signal song_selected(song_id, difficulty)
 signal begin_loading
 var game_info = HBGameInfo.new()
@@ -93,6 +110,8 @@ func _ready():
 
 var current_assets: SongAssetLoader.AssetLoadToken
 var variant_select: Control
+var pack_select: Control
+var skin_select: Control
 
 func set_current_assets(assets: SongAssetLoader.AssetLoadToken):
 	if assets.song == current_song:
@@ -299,6 +318,72 @@ func add_buttons():
 		open_leaderboard_button.icon = preload("res://graphics/icons/table.svg")
 		modifier_button_container.add_child(open_leaderboard_button)
 	
+	# ── Resource/Icon pack selector ──
+	pack_select = null
+	var loader = get_tree().root.get_node_or_null("ResourcePackLoader")
+	if loader != null and loader.resource_packs != null and typeof(loader.resource_packs) == TYPE_DICTIONARY:
+		var packs: Dictionary = loader.resource_packs
+		# Build ordered list: preferred first, then remaining alphabetically
+		var ordered_keys: Array = []
+		for key in PREFERRED_PACK_ORDER:
+			if packs.has(key) and not ordered_keys.has(String(key)):
+				ordered_keys.append(String(key))
+		var remaining: Array = []
+		for key in packs.keys():
+			var k = String(key)
+			if not ordered_keys.has(k):
+				remaining.append(k)
+		remaining.sort()
+		for key in remaining:
+			ordered_keys.append(key)
+
+		if ordered_keys.size() > 1:
+			pack_select = preload("res://menus/options_menu/OptionSelect.tscn").instantiate()
+			pack_select.text = "Icon Pack"
+			pack_select.options = ordered_keys.duplicate()
+			pack_select.options_pretty = ordered_keys.duplicate()
+			pack_select.connect("back", Callable(modifier_scroll_container, "grab_focus"))
+			modifier_button_container.add_child(pack_select)
+
+			# Select the currently active pack
+			var current_key = String(UserSettings.user_settings.resource_pack)
+			pack_select.set_block_signals(true)
+			if ordered_keys.has(current_key):
+				pack_select.value = current_key
+			else:
+				pack_select.value = ordered_keys[0]
+			pack_select.set_block_signals(false)
+			pack_select.connect("changed", Callable(self, "_on_pack_selected"))
+
+		# ── UI Skin / Resource Pack selector ──
+		skin_select = null
+		if loader != null:
+			var skin_keys: Array = []
+			for key in ordered_keys:
+				var pack = packs.get(key, null)
+				if pack == null:
+					continue
+				# Only include packs that self-report as skins
+				if pack.has_method("is_skin") and pack.is_skin():
+					skin_keys.append(String(key))
+
+			if skin_keys.size() > 1:
+				skin_select = preload("res://menus/options_menu/OptionSelect.tscn").instantiate()
+				skin_select.text = "Resource Pack"
+				skin_select.options = skin_keys.duplicate()
+				skin_select.options_pretty = skin_keys.duplicate()
+				skin_select.connect("back", Callable(modifier_scroll_container, "grab_focus"))
+				modifier_button_container.add_child(skin_select)
+
+				var current_skin = String(UserSettings.user_settings.ui_skin)
+				skin_select.set_block_signals(true)
+				if skin_keys.has(current_skin):
+					skin_select.value = current_skin
+				else:
+					skin_select.value = skin_keys[0]
+				skin_select.set_block_signals(false)
+				skin_select.connect("changed", Callable(self, "_on_skin_selected"))
+
 	var add_modifier_button = HBHovereableButton.new()
 	add_modifier_button.text = "Add modifier"
 	add_modifier_button.expand_icon = true
@@ -340,6 +425,54 @@ func update_modifiers():
 func _on_add_modifier_pressed():
 	modifier_selector.popup()
 	tabbed_container.set_process_unhandled_input(false)
+
+func _on_pack_selected(new_value):
+	var chosen_key := String(new_value)
+	var current_key := String(UserSettings.user_settings.resource_pack)
+	print("[PACK] _on_pack_selected called: new_value=%s (type=%d), chosen_key=%s, current_key=%s" % [str(new_value), typeof(new_value), chosen_key, current_key])
+	if chosen_key == current_key:
+		print("[PACK] Same pack, skipping")
+		return
+
+	var loader = get_tree().root.get_node_or_null("ResourcePackLoader")
+	if loader == null:
+		print("[PACK] ResourcePackLoader not found!")
+		return
+	
+	print("[PACK] loader found, has rebuild_final_atlases: %s, has reload_skin: %s" % [str(loader.has_method("rebuild_final_atlases")), str(loader.has_method("reload_skin"))])
+
+	# 1) Update user settings
+	UserSettings.user_settings.resource_pack = chosen_key
+	print("[PACK] Set resource_pack = %s" % chosen_key)
+
+	# 2) Rebuild atlases
+	if loader.has_method("rebuild_final_atlases"):
+		loader.rebuild_final_atlases()
+		print("[PACK] rebuild_final_atlases() called")
+
+	# 3) Persist
+	UserSettings.save_user_settings()
+	print("[PACK] Settings saved. resource_pack is now: %s" % String(UserSettings.user_settings.resource_pack))
+
+func _on_skin_selected(new_value):
+	var chosen_key := String(new_value)
+	var current_key := String(UserSettings.user_settings.ui_skin)
+	if chosen_key == current_key:
+		return
+
+	var loader = get_tree().root.get_node_or_null("ResourcePackLoader")
+	if loader == null:
+		return
+
+	# 1) Update user settings
+	UserSettings.user_settings.ui_skin = chosen_key
+
+	# 2) Reload the skin
+	if loader.has_method("reload_skin"):
+		loader.reload_skin()
+
+	# 3) Persist
+	UserSettings.save_user_settings()
 	
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("gui_cancel"):
