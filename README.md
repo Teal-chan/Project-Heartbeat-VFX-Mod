@@ -14,7 +14,7 @@
 <img width="839" height="475" alt="Screenshot 2025-11-03 095214" src="https://github.com/user-attachments/assets/72143b95-d6b1-4c92-a137-720ff5631873" />
 <img width="1897" height="611" alt="Screenshot 2026-02-03 014628" src="https://github.com/user-attachments/assets/a508a9f5-dc83-488e-a0de-cda96ab7d0f7" />
 
-# Project Heartbeat Extend
+# Project Heartbeat EXTEND
 
 A comprehensive modding framework for [Project Heartbeat](https://store.steampowered.com/app/1216230/Project_Heartbeat/) that adds professional-grade VFX authoring, quality-of-life editor improvements, and new gameplay features.
 
