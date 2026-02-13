@@ -16,6 +16,7 @@ var pevent_pregame_screen = false
 @onready var add_to_prompt = get_node("VBoxContainer/Prompts/HBoxContainer/HBoxContainer/Panel8")
 @onready var manage_folders_prompt = get_node("VBoxContainer/Prompts/HBoxContainer/HBoxContainer/Panel9")
 @onready var remove_item_prompt = get_node("VBoxContainer/Prompts/HBoxContainer/HBoxContainer/Panel10")
+@onready var favorite_prompt = get_node("%FavoritePrompt")
 @onready var song_count_indicator = get_node("SongCountIndicator")
 @onready var search_text_input = get_node("SearchTextInput")
 @onready var sort_mode_label: Label = get_node("%SortModeLabel")
@@ -251,20 +252,18 @@ func _register_favorite_action():
 		var key_event := InputEventKey.new()
 		key_event.keycode = KEY_D
 		InputMap.action_add_event(&"gui_favorite", key_event)
-		# Xbox Y / Steam Deck Y (joypad button 3)
-		var joy_y := InputEventJoypadButton.new()
-		joy_y.button_index = JOY_BUTTON_Y
-		InputMap.action_add_event(&"gui_favorite", joy_y)
 		# Xbox X / Steam Deck X (joypad button 2)
 		var joy_x := InputEventJoypadButton.new()
 		joy_x.button_index = JOY_BUTTON_X
 		InputMap.action_add_event(&"gui_favorite", joy_x)
 	_favorite_action_registered = true
 
+func _init():
+	_register_favorite_action()
+
 func _ready():
 	super._ready()
 	favorite_song_ids = _load_favorites()
-	_register_favorite_action()
 	_new_workshop_song_added_queuer.connect(_new_workshop_song_added_update, CONNECT_ONE_SHOT | CONNECT_DEFERRED)
 	song_container.connect("song_hovered", Callable(self, "_on_song_hovered"))
 	song_container.connect("hover_nonsong", Callable(self, "_on_non_song_hovered"))
