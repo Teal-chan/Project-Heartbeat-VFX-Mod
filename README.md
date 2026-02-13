@@ -173,6 +173,14 @@ Perfect Run only makes the game harder, so scores are fully leaderboard-eligible
 
 ---
 
+## 🚫 No-Laser Modifier
+
+A modifier that disables the connecting line between chord notes, without going to the options menu.
+
+Feature request for a simple modifier. Leaderboard legal.
+
+---
+
 ## 🎵 Media Player
 
 An audio-only media player for any song in your Project Heartbeat library.
@@ -278,14 +286,14 @@ ph_vfx.gd Modifier → Same AnimBank/Shaders
 
 Custom shaders handle visual transforms:
 
-- **note_vfx.gdshader**: 4-in-1 shader for scale, rotation, offset, and color
+- **note_vfx.gdshader**: 5-in-1 shader for scale, rotation, offset, color, and glow
 - **spot_overlay.gdshader**: Screen-space vignette for spotlight effects
 
-All transforms are GPU-accelerated with proper pivot handling.
+All transforms are GPU-accelerated with proper pivot handling. Now optimized for integrated GPU (Steam Deck compatible.)
 
 ### Leaderboard Legality
 
-Both custom modifiers are flagged to be leaderboard-legal due to a change in the game's modifier check system. It now asks the modifiers if they are legal, and if even one of them doesn't answer, the run is disqualified.
+All custom modifiers are flagged to be leaderboard-legal due to a change in the game's modifier check system. It now asks the modifiers if they are legal, and if even one of them doesn't answer, the run is disqualified.
 
 ---
 
