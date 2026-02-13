@@ -239,9 +239,32 @@ func _on_unsubscribe_accepted():
 		song_container.grab_focus()
 		item_to_unsubscribe = null
 		song_to_unsubscribe = null
+# --- PH Extend: Register controller/keyboard action for favorites ---
+static var _favorite_action_registered := false
+
+func _register_favorite_action():
+	if _favorite_action_registered:
+		return
+	if not InputMap.has_action(&"gui_favorite"):
+		InputMap.add_action(&"gui_favorite")
+		# Keyboard: F
+		var key_event := InputEventKey.new()
+		key_event.keycode = KEY_D
+		InputMap.action_add_event(&"gui_favorite", key_event)
+		# Xbox Y / Steam Deck Y (joypad button 3)
+		var joy_y := InputEventJoypadButton.new()
+		joy_y.button_index = JOY_BUTTON_Y
+		InputMap.action_add_event(&"gui_favorite", joy_y)
+		# Xbox X / Steam Deck X (joypad button 2)
+		var joy_x := InputEventJoypadButton.new()
+		joy_x.button_index = JOY_BUTTON_X
+		InputMap.action_add_event(&"gui_favorite", joy_x)
+	_favorite_action_registered = true
+
 func _ready():
 	super._ready()
 	favorite_song_ids = _load_favorites()
+	_register_favorite_action()
 	_new_workshop_song_added_queuer.connect(_new_workshop_song_added_update, CONNECT_ONE_SHOT | CONNECT_DEFERRED)
 	song_container.connect("song_hovered", Callable(self, "_on_song_hovered"))
 	song_container.connect("hover_nonsong", Callable(self, "_on_non_song_hovered"))
@@ -477,6 +500,11 @@ func _unhandled_input(event):
 					folder_manager.show_manager(folder_manager.MODE.MANAGE)
 			else:
 				folder_manager.show_manager(folder_manager.MODE.SELECT)
+		elif event.is_action_pressed("gui_favorite"):
+			get_viewport().set_input_as_handled()
+			var item = song_container.get_selected_item()
+			if item and item is HBSongListItem:
+				_on_favorite_toggled(item.song)
 	else:
 		if event.is_action_pressed("gui_cancel") and sort_by_list.visible:
 			HBGame.fire_and_forget_sound(HBGame.menu_back_sfx, HBGame.sfx_group)
