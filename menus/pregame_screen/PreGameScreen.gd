@@ -337,21 +337,29 @@ func add_buttons():
 		for key in remaining:
 			ordered_keys.append(key)
 
-		if ordered_keys.size() > 1:
+		# Filter to icon packs only (exclude skin/resource packs)
+		var icon_keys: Array = []
+		for key in ordered_keys:
+			var pack = packs.get(key, null)
+			if pack != null and pack.has_method("is_skin") and pack.is_skin():
+				continue
+			icon_keys.append(key)
+
+		if icon_keys.size() > 1:
 			pack_select = preload("res://menus/options_menu/OptionSelect.tscn").instantiate()
 			pack_select.text = "Icon Pack"
-			pack_select.options = ordered_keys.duplicate()
-			pack_select.options_pretty = ordered_keys.duplicate()
+			pack_select.options = icon_keys.duplicate()
+			pack_select.options_pretty = icon_keys.duplicate()
 			pack_select.connect("back", Callable(modifier_scroll_container, "grab_focus"))
 			modifier_button_container.add_child(pack_select)
 
 			# Select the currently active pack
 			var current_key = String(UserSettings.user_settings.resource_pack)
 			pack_select.set_block_signals(true)
-			if ordered_keys.has(current_key):
+			if icon_keys.has(current_key):
 				pack_select.value = current_key
 			else:
-				pack_select.value = ordered_keys[0]
+				pack_select.value = icon_keys[0]
 			pack_select.set_block_signals(false)
 			pack_select.connect("changed", Callable(self, "_on_pack_selected"))
 
