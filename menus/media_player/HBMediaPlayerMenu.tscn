@@ -1,7 +1,13 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://menus/media_player/HBMediaPlayerMenu.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://b1mbegd5nhs23" path="res://graphics/no_preview_texture.png" id="2"]
+[ext_resource type="Texture2D" path="res://graphics/icons/media_player/shuffle.svg" id="3"]
+[ext_resource type="Texture2D" path="res://graphics/icons/media_player/previous.svg" id="4"]
+[ext_resource type="Texture2D" path="res://graphics/icons/media_player/play.svg" id="5"]
+[ext_resource type="Texture2D" path="res://graphics/icons/media_player/pause.svg" id="6"]
+[ext_resource type="Texture2D" path="res://graphics/icons/media_player/next.svg" id="7"]
+[ext_resource type="Texture2D" path="res://graphics/icons/media_player/repeat.svg" id="8"]
 
 [node name="MediaPlayerMenu" type="Control"]
 layout_mode = 3
@@ -207,31 +213,31 @@ alignment = 1
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 tooltip_text = "Shuffle"
-text = "🔀"
+icon = ExtResource("3")
 
 [node name="PrevButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 tooltip_text = "Previous"
-text = "⏮"
+icon = ExtResource("4")
 
 [node name="PlayButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
 custom_minimum_size = Vector2(70, 70)
 layout_mode = 2
 tooltip_text = "Play/Pause"
-text = "▶"
+icon = ExtResource("5")
 
 [node name="NextButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 tooltip_text = "Next"
-text = "⏭"
+icon = ExtResource("7")
 
 [node name="RepeatButton" type="Button" parent="MainContainer/PlayerPanel/VBoxContainer/ControlsContainer"]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 tooltip_text = "Repeat"
-text = "🔁"
+icon = ExtResource("8")
 
 [node name="BottomControls" type="HBoxContainer" parent="MainContainer/PlayerPanel/VBoxContainer"]
 layout_mode = 2
