@@ -342,7 +342,7 @@ func _build_and_show_game_over_menu() -> void:
 	container.alignment = BoxContainer.ALIGNMENT_CENTER
 
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 60)
+	spacer.custom_minimum_size = Vector2(0, 160)
 	container.add_child(spacer)
 
 	var hbox := HBoxContainer.new()
