@@ -119,7 +119,16 @@ func set_current_assets(assets: SongAssetLoader.AssetLoadToken):
 
 func _on_user_added_modifier(modifier_id: String):
 	if not modifier_id in game_info.modifiers:
+		# Remove any incompatible modifiers before adding the new one
+		var new_mod_class = ModifierLoader.get_modifier_by_id(modifier_id)
+		if new_mod_class and new_mod_class.has_method("get_incompatible_modifiers"):
+			for incompatible_id in new_mod_class.get_incompatible_modifiers():
+				if incompatible_id in game_info.modifiers:
+					_remove_modifier(incompatible_id)
 		game_info.add_new_modifier(modifier_id)
+		# Notify the modifier it was added (for setting overrides)
+		if new_mod_class and new_mod_class.has_method("on_modifier_added"):
+			new_mod_class.on_modifier_added()
 		var button = add_modifier_control(modifier_id)
 		modifier_scroll_container.select_item(button.get_index())
 	modifier_scroll_container.grab_focus()
@@ -254,16 +263,25 @@ func _on_modify_song_settings_pressed():
 	tabbed_container.set_process_unhandled_input(false)
 	
 
+func _remove_modifier(modifier_id: String):
+	# Notify the modifier it's being removed (for setting restores)
+	var mod_class = ModifierLoader.get_modifier_by_id(modifier_id)
+	if mod_class and mod_class.has_method("on_modifier_removed"):
+		mod_class.on_modifier_removed()
+	if modifier_id in modifier_buttons:
+		var modifier_button = modifier_buttons[modifier_id]
+		modifier_button_container.remove_child(modifier_button)
+		modifier_button.queue_free()
+		modifier_buttons.erase(modifier_id)
+	game_info.modifiers.erase(modifier_id)
+
 func _on_remove_modifier_selected(modifier_id: String, modifier_button):
 	var current_button_i = modifier_button.get_index()
 	var new_button_i = current_button_i-1
 	new_button_i = clamp(new_button_i, 0, modifier_button_container.get_child_count()-1)
 	modifier_scroll_container.select_item(new_button_i)
 	
-	modifier_button_container.remove_child(modifier_button)
-	modifier_buttons.erase(modifier_id)
-	modifier_button.queue_free()
-	game_info.modifiers.erase(modifier_id)
+	_remove_modifier(modifier_id)
 	UserSettings.save_user_settings()
 	draw_leaderboard_legality()
 	
@@ -339,17 +357,25 @@ func add_buttons():
 
 		# Filter to icon packs only (exclude skin/resource packs)
 		var icon_keys: Array = []
+		var icon_pretty_names: Array = []
 		for key in ordered_keys:
 			var pack = packs.get(key, null)
 			if pack != null and pack.has_method("is_skin") and pack.is_skin():
 				continue
 			icon_keys.append(key)
+			# Use pack_name if available, otherwise fall back to folder name
+			var display_name = String(key)
+			if pack != null:
+				var pack_name_value = pack.get("pack_name", "")
+				if pack_name_value != null and pack_name_value != "":
+					display_name = pack_name_value
+			icon_pretty_names.append(display_name)
 
 		if icon_keys.size() > 1:
 			pack_select = preload("res://menus/options_menu/OptionSelect.tscn").instantiate()
 			pack_select.text = "Icon Pack"
 			pack_select.options = icon_keys.duplicate()
-			pack_select.options_pretty = icon_keys.duplicate()
+			pack_select.options_pretty = icon_pretty_names.duplicate()
 			pack_select.connect("back", Callable(modifier_scroll_container, "grab_focus"))
 			modifier_button_container.add_child(pack_select)
 
@@ -367,6 +393,7 @@ func add_buttons():
 		skin_select = null
 		if loader != null:
 			var skin_keys: Array = []
+			var skin_pretty_names: Array = []
 			for key in ordered_keys:
 				var pack = packs.get(key, null)
 				if pack == null:
@@ -374,12 +401,18 @@ func add_buttons():
 				# Only include packs that self-report as skins
 				if pack.has_method("is_skin") and pack.is_skin():
 					skin_keys.append(String(key))
+					# Use pack_name if available, otherwise fall back to folder name
+					var display_name = String(key)
+					var pack_name_value = pack.get("pack_name", "")
+					if pack_name_value != null and pack_name_value != "":
+						display_name = pack_name_value
+					skin_pretty_names.append(display_name)
 
 			if skin_keys.size() > 1:
 				skin_select = preload("res://menus/options_menu/OptionSelect.tscn").instantiate()
 				skin_select.text = "Resource Pack"
 				skin_select.options = skin_keys.duplicate()
-				skin_select.options_pretty = skin_keys.duplicate()
+				skin_select.options_pretty = skin_pretty_names.duplicate()
 				skin_select.connect("back", Callable(modifier_scroll_container, "grab_focus"))
 				modifier_button_container.add_child(skin_select)
 
