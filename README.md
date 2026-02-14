@@ -59,7 +59,7 @@ Quality-of-life improvements that streamline the charting workflow:
 > **Note**: This mod requires a legally purchased copy of Project Heartbeat. Please purchase the game on Steam if you want to play the mod.
 
 1. Browse your Local Files, find the "Project Heartbeat.pck" file, make a copy and back it up
-2. Replace it with the modded version here: https://drive.google.com/file/d/1gSJrkXsBo-cheNugu686usfIhjuAn9mD/view?usp=sharing
+2. Replace it with the modded version here: https://drive.google.com/file/d/1NnBomocctw2vt19MQU9zBSBpscOir6Sl/view?usp=sharing
 3. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1WwL2mP1TkAEoC2WvV0nF0oYo2Y6yq11S/view?usp=sharing
 3. Launch the game normally (Or preferably, from command prompt/terminal to see the console outputs)
 
