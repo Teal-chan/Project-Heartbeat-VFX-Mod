@@ -6,6 +6,7 @@ extends HBMenu
 const MediaItem = preload("res://menus/media_player/HBMediaItem.gd")
 const MediaPlaylist = preload("res://menus/media_player/HBMediaPlaylist.gd")
 const MediaPlayerController = preload("res://menus/media_player/HBMediaPlayerController.gd")
+const VFXUtils = preload("user://editor_scripts/Modules/vfx_utils.gd")
 
 signal song_changed(item)
 signal pause_background_player
@@ -69,11 +70,24 @@ const TEXT_REPEAT_OFF = "🔁"
 const TEXT_REPEAT_ONE = "🔂"
 const TEXT_REPEAT_ALL = "🔁✓"
 
+# Icon textures (loaded at runtime)
+var icon_shuffle: Texture2D
+var icon_previous: Texture2D
+var icon_play: Texture2D
+var icon_pause: Texture2D
+var icon_next: Texture2D
+var icon_repeat_off: Texture2D
+var icon_repeat_all: Texture2D
+var icon_repeat_one: Texture2D
+
 
 func _ready():
 	super._ready()
 	
 	print("[MediaPlayerMenu] Initializing...")
+	
+	# Load custom SVG icons
+	_load_custom_icons()
 	
 	# Initialize controller
 	controller = MediaPlayerController.new()
@@ -186,6 +200,39 @@ func _on_menu_exit(force_hard_transition=false):
 	_launching_to_game = false
 
 
+func _load_custom_icons():
+	"""Load SVG icons for media player controls"""
+	var icon_dir = "res://graphics/icons/media_player/"
+	
+	icon_shuffle = VFXUtils.load_svg_icon(icon_dir + "shuffle.svg", 48)
+	icon_previous = VFXUtils.load_svg_icon(icon_dir + "previous.svg", 48)
+	icon_play = VFXUtils.load_svg_icon(icon_dir + "play.svg", 48)
+	icon_pause = VFXUtils.load_svg_icon(icon_dir + "pause.svg", 48)
+	icon_next = VFXUtils.load_svg_icon(icon_dir + "next.svg", 48)
+	icon_repeat_off = VFXUtils.load_svg_icon(icon_dir + "repeat_off.svg", 48)
+	icon_repeat_all = VFXUtils.load_svg_icon(icon_dir + "repeat_all.svg", 48)
+	icon_repeat_one = VFXUtils.load_svg_icon(icon_dir + "repeat_one.svg", 48)
+	
+	# Apply icons to buttons
+	if icon_shuffle:
+		shuffle_button.icon = icon_shuffle
+		shuffle_button.text = ""
+	if icon_previous:
+		prev_button.icon = icon_previous
+		prev_button.text = ""
+	if icon_play:
+		play_button.icon = icon_play
+		play_button.text = ""
+	if icon_next:
+		next_button.icon = icon_next
+		next_button.text = ""
+	if icon_repeat_off:
+		repeat_button.icon = icon_repeat_off
+		repeat_button.text = ""
+	
+	print("[MediaPlayerMenu] Custom icons loaded")
+
+
 # UI Update Methods
 
 func _update_ui_state():
@@ -194,28 +241,41 @@ func _update_ui_state():
 	
 	# Update play/pause button
 	if controller.is_playing():
-		play_button.text = TEXT_PAUSE
+		if icon_pause:
+			play_button.icon = icon_pause
+		else:
+			play_button.text = TEXT_PAUSE
 	else:
-		play_button.text = TEXT_PLAY
+		if icon_play:
+			play_button.icon = icon_play
+		else:
+			play_button.text = TEXT_PLAY
 	
 	# Update shuffle button
 	if playlist.shuffle_mode == MediaPlaylist.ShuffleMode.ON:
-		shuffle_button.text = TEXT_SHUFFLE_ON
 		shuffle_button.modulate = Color.WHITE
 	else:
-		shuffle_button.text = TEXT_SHUFFLE_OFF
 		shuffle_button.modulate = Color(1, 1, 1, 0.5)
 	
-	# Update repeat button
+	# Update repeat button - swap icons based on mode
 	match playlist.repeat_mode:
 		MediaPlaylist.RepeatMode.OFF:
-			repeat_button.text = TEXT_REPEAT_OFF
+			if icon_repeat_off:
+				repeat_button.icon = icon_repeat_off
+			else:
+				repeat_button.text = TEXT_REPEAT_OFF
 			repeat_button.modulate = Color(1, 1, 1, 0.5)
 		MediaPlaylist.RepeatMode.ALL:
-			repeat_button.text = TEXT_REPEAT_ALL
+			if icon_repeat_all:
+				repeat_button.icon = icon_repeat_all
+			else:
+				repeat_button.text = TEXT_REPEAT_ALL
 			repeat_button.modulate = Color.WHITE
 		MediaPlaylist.RepeatMode.ONE:
-			repeat_button.text = TEXT_REPEAT_ONE
+			if icon_repeat_one:
+				repeat_button.icon = icon_repeat_one
+			else:
+				repeat_button.text = TEXT_REPEAT_ONE
 			repeat_button.modulate = Color.WHITE
 	
 	# Update play in game button - only enable if we have a valid song
