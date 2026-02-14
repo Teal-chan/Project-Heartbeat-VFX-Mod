@@ -269,6 +269,9 @@ func is_ui_visible():
 
 func play_game_over():
 	game_over_message_node.show()
+	# Re-randomize the game over quote (otherwise restarts show the same one)
+	# The Label with reroll() may be nested several levels deep
+	_reroll_game_over_message(game_over_message_node)
 	HBGame.fire_and_forget_sound(HBGame.game_over_sfx, HBGame.sfx_group)
 	game_over_message_node.pivot_offset = game_over_message_node.size * 0.5
 	game_over_message_node.scale.x = 0.0
@@ -481,6 +484,16 @@ func _go_update_selection() -> void:
 		else:
 			_go_quit_btn.modulate = GO_COLOR_DESELECTED
 			_go_quit_btn.text = "  Quit  "
+
+
+func _reroll_game_over_message(node: Node) -> bool:
+	if node.has_method("reroll"):
+		node.reroll()
+		return true
+	for child in node.get_children():
+		if _reroll_game_over_message(child):
+			return true
+	return false
 
 
 func _dismiss_game_over_menu() -> void:
