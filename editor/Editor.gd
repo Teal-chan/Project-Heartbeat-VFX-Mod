@@ -1621,16 +1621,22 @@ func show_icon_pack_dialog() -> void:
 		_notify_editor("No resource packs available")
 		return
 	
-	# Build ordered list of pack keys
+	# Build ordered list of pack keys, excluding skin-only packs
 	var ordered_keys: Array = []
 	for key in PREFERRED_PACK_ORDER:
 		if packs.has(key) and not ordered_keys.has(String(key)):
+			var pack = packs[key]
+			if pack != null and pack.is_skin():
+				continue
 			ordered_keys.append(String(key))
 	
 	var remaining: Array = []
 	for key in packs.keys():
 		var k = String(key)
 		if not ordered_keys.has(k):
+			var pack = packs[key]
+			if pack != null and pack.is_skin():
+				continue
 			remaining.append(k)
 	remaining.sort()
 	for key in remaining:
@@ -1662,7 +1668,15 @@ func show_icon_pack_dialog() -> void:
 	var idx = 0
 	for key in ordered_keys:
 		var str_key = String(key)
-		option.add_item(str_key)
+		var pack = packs.get(key, null)
+		# Use pack_name if available, otherwise fall back to folder name
+		var display_name = str_key
+		if pack != null:
+			var pack_name_value = pack.get("pack_name", "")
+			if pack_name_value != null and pack_name_value != "":
+				display_name = pack_name_value
+		option.add_item(display_name)
+		option.set_item_metadata(idx, str_key)  # Store the folder name as metadata
 		if str_key == current_key:
 			selected_idx = idx
 		idx += 1
@@ -1670,18 +1684,19 @@ func show_icon_pack_dialog() -> void:
 	
 	root.add_child(dialog)
 	
-	dialog.confirmed.connect(_on_icon_pack_dialog_confirmed.bind(dialog, option, ordered_keys))
+	dialog.confirmed.connect(_on_icon_pack_dialog_confirmed.bind(dialog, option))
 	dialog.popup_centered()
 
 
-func _on_icon_pack_dialog_confirmed(dialog: AcceptDialog, option: OptionButton, pack_keys: Array) -> void:
+func _on_icon_pack_dialog_confirmed(dialog: AcceptDialog, option: OptionButton) -> void:
 	var idx = option.get_selected()
 	dialog.queue_free()
 	
-	if idx < 0 or idx >= pack_keys.size():
+	if idx < 0:
 		return
 	
-	var chosen_key = String(pack_keys[idx])
+	# Get the folder name from metadata
+	var chosen_key = String(option.get_item_metadata(idx))
 	var current_key = String(UserSettings.user_settings.resource_pack)
 	
 	if chosen_key == current_key:
@@ -1746,12 +1761,6 @@ func _apply_icon_pack(chosen_key: String) -> void:
 	# 8) Rebuild runtime preview notes
 	_icon_pack_rebuild_preview_notes()
 	
-	# 9) Refresh hold indicator icons
-	_icon_pack_refresh_hold_indicators()
-	
-	# 10) Refresh judgement labels
-	_icon_pack_refresh_judgement_labels()
-	
 	_notify_editor("Icon pack changed to: %s" % chosen_key)
 
 
@@ -1775,22 +1784,21 @@ func _icon_pack_refresh_lane_headers() -> void:
 	if timeline == null:
 		return
 	
+	# The lane header icons live in EditorLayerName nodes under timeline.layer_names.
+	# Each one sets its icon in its set_layer_name setter via ResourcePackLoader.get_graphic().
+	# Re-assigning layer_name triggers the setter, which re-fetches the graphic from
+	# the now-updated ResourcePackLoader.
 	if not ("layer_names" in timeline):
 		return
 	
-	var layer_names = timeline.layer_names
-	if layer_names == null or not (layer_names is Array):
+	var lane_name_nodes = timeline.layer_names.get_children()
+	if lane_name_nodes == null or lane_name_nodes.is_empty():
 		return
 	
-	for ln in layer_names:
-		if ln == null:
+	for lns in lane_name_nodes:
+		if lns == null:
 			continue
-		if ln.has_method("_update_icon"):
-			ln._update_icon()
-		elif ln.has_method("update_icon"):
-			ln.update_icon()
-		if ln.has_method("queue_redraw"):
-			ln.queue_redraw()
+		lns.layer_name = lns.layer_name
 
 
 func _icon_pack_refresh_timeline_and_minimap() -> void:
@@ -1848,136 +1856,6 @@ func _icon_pack_rebuild_preview_notes() -> void:
 	
 	if has_method("force_game_process"):
 		force_game_process()
-
-
-func _icon_pack_refresh_hold_indicators() -> void:
-	var tree = get_tree()
-	if tree == null:
-		return
-	var root = tree.get_root()
-	if root == null:
-		return
-	
-	# Find all HoldIndicator nodes
-	var hold_nodes: Array = []
-	var stack: Array = [root]
-	while stack.size() > 0:
-		var n = stack.pop_back()
-		if n == null:
-			continue
-		if String(n.name) == "HoldIndicator":
-			hold_nodes.append(n)
-		for c in n.get_children():
-			stack.append(c)
-	
-	if hold_nodes.is_empty():
-		return
-	
-	# Get UP note texture
-	var up_type = null
-	if HBBaseNote.NOTE_TYPE.has("UP"):
-		up_type = HBBaseNote.NOTE_TYPE["UP"]
-	elif HBNoteData.NOTE_TYPE.has("UP"):
-		up_type = HBNoteData.NOTE_TYPE["UP"]
-	
-	if up_type == null:
-		return
-	
-	var tex := HBNoteData.get_note_graphic(up_type, "note") as Texture2D
-	if tex == null:
-		return
-	
-	for hold in hold_nodes:
-		_icon_pack_apply_tex_to_hold(hold, tex)
-
-
-func _icon_pack_apply_tex_to_hold(node: Node, tex: Texture2D) -> void:
-	if node is TextureRect:
-		var tr := node as TextureRect
-		tr.texture = tex
-		tr.queue_redraw()
-	
-	for child in node.get_children():
-		_icon_pack_apply_tex_to_hold(child, tex)
-
-
-func _icon_pack_refresh_judgement_labels() -> void:
-	var tree = get_tree()
-	if tree == null:
-		return
-	var root = tree.get_root()
-	if root == null:
-		return
-	
-	var loader = root.get_node_or_null("ResourcePackLoader")
-	if loader == null:
-		return
-	
-	# Collect judgement texture keys
-	var judgement_keys: Array[String] = []
-	var ft = loader.final_textures
-	if typeof(ft) == TYPE_DICTIONARY:
-		for key in ft.keys():
-			var s := String(key).to_lower()
-			if s.find("judge") != -1 or s.find("judgement") != -1:
-				judgement_keys.append(String(key))
-	
-	if judgement_keys.is_empty():
-		return
-	
-	judgement_keys.sort()
-	
-	# Find JudgementLabel nodes
-	var jl_nodes: Array = []
-	var stack: Array = [root]
-	while stack.size() > 0:
-		var n = stack.pop_back()
-		if n == null:
-			continue
-		if String(n.name) == "JudgementLabel":
-			jl_nodes.append(n)
-		for c in n.get_children():
-			stack.append(c)
-	
-	if jl_nodes.is_empty():
-		return
-	
-	for jl in jl_nodes:
-		var tex_nodes: Array = []
-		_icon_pack_collect_tex_nodes(jl, tex_nodes)
-		
-		if tex_nodes.is_empty():
-			continue
-		
-		var idx := 0
-		for tex_node in tex_nodes:
-			if idx >= judgement_keys.size():
-				break
-			
-			var key := judgement_keys[idx]
-			var tex = loader.get_graphic(key)
-			if tex == null:
-				idx += 1
-				continue
-			
-			if tex_node is TextureRect:
-				var tr := tex_node as TextureRect
-				tr.texture = tex
-				tr.queue_redraw()
-			elif tex_node is Sprite2D:
-				var sp := tex_node as Sprite2D
-				sp.texture = tex
-				sp.queue_redraw()
-			
-			idx += 1
-
-
-func _icon_pack_collect_tex_nodes(node: Node, out: Array) -> void:
-	if node is TextureRect or node is Sprite2D:
-		out.append(node)
-	
-	for child in node.get_children():
-		_icon_pack_collect_tex_nodes(child, out)
 
 
 func upload_current_song_to_workshop() -> void:
@@ -2730,6 +2608,7 @@ func _on_PlaytestButton_pressed(at_time):
 	rhythm_game.set_process_input(false)
 	playtesting = true
 	add_child(rhythm_game_playtest_popup)
+	_refresh_playtest_icons()
 	$VBoxContainer.hide()
 	var play_time = 0.0
 	if at_time:
@@ -2740,6 +2619,55 @@ func _on_PlaytestButton_pressed(at_time):
 	rhythm_game_playtest_popup.play_song_from_position(current_song, get_chart(), current_difficulty, play_time / 1000.0, song_editor_settings.show_bg, song_editor_settings.show_video)
 	
 	Diagnostics.fps_label.add_theme_font_size_override("font_size", 23)
+
+func _refresh_playtest_icons():
+	# The playtest popup is reused across playtests, so _ready() only runs once
+	# for its child nodes. Walk the popup to refresh textures from the current
+	# ResourcePackLoader state for HoldIndicator and HBJudgementLabel.
+	var stack: Array = [rhythm_game_playtest_popup]
+	while stack.size() > 0:
+		var n = stack.pop_back()
+		if n == null:
+			continue
+		
+		# HoldIndicator: has icon_nodes dict + current_holds array
+		if "icon_nodes" in n and "current_holds" in n:
+			for type_name in n.icon_nodes:
+				var type = HBNoteData.NOTE_TYPE[type_name]
+				var tex = ResourcePackLoader.get_graphic("%s_note.png" % [HBGame.NOTE_TYPE_TO_STRING_MAP[type]])
+				if tex != null:
+					n.icon_nodes[type_name].texture = tex
+		
+		# HBJudgementLabel: has JUDGEMENT_TEXTURES, WRONG_JUDGEMENT_TEXTURES,
+		# and COMBO_NUMBER_TEXTURES arrays populated in _ready()
+		if "JUDGEMENT_TEXTURES" in n and "WRONG_JUDGEMENT_TEXTURES" in n and "COMBO_NUMBER_TEXTURES" in n:
+			# Re-fetch judgement textures: worst, sad, safe, fine, cool
+			var idx := 0
+			for judgement: String in HBJudge.JUDGE_RATINGS:
+				var graphic_name := judgement.to_lower() + ".png"
+				var tex = ResourcePackLoader.get_graphic(graphic_name)
+				if tex != null and idx < n.JUDGEMENT_TEXTURES.size():
+					n.JUDGEMENT_TEXTURES[idx] = tex
+				
+				# Wrong variants
+				var wrong_tex
+				if judgement == "WORST":
+					wrong_tex = ResourcePackLoader.get_graphic("wrong.png")
+				else:
+					wrong_tex = ResourcePackLoader.get_graphic(judgement.to_lower() + "_wrong.png")
+				if wrong_tex != null and idx < n.WRONG_JUDGEMENT_TEXTURES.size():
+					n.WRONG_JUDGEMENT_TEXTURES[idx] = wrong_tex
+				
+				idx += 1
+			
+			# Re-fetch combo number textures: combo_0.png through combo_9.png
+			for i in range(min(10, n.COMBO_NUMBER_TEXTURES.size())):
+				var tex = ResourcePackLoader.get_graphic("combo_%d.png" % i)
+				if tex != null:
+					n.COMBO_NUMBER_TEXTURES[i] = tex
+		
+		for c in n.get_children():
+			stack.append(c)
 
 func _on_playtest_quit():
 	#TODOGD4
