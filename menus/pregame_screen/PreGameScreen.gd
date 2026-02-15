@@ -23,6 +23,10 @@ const BASE_HEIGHT = 720.0
 # NEW: preload PHVFX modifier script so we can stamp its static context
 const PHVFXModifier = preload("res://rythm_game/modifiers/ph_vfx/ph_vfx.gd")
 
+# Media Player integration
+const MediaItem = preload("res://menus/media_player/HBMediaItem.gd")
+const MediaPlaylist = preload("res://menus/media_player/HBMediaPlaylist.gd")
+
 # ── Resource pack selector ──
 const PREFERRED_PACK_ORDER = [
 	"default_skin",
@@ -104,6 +108,17 @@ func _ready():
 	
 	pregame_start_tab.start_button.connect("pressed", Callable(self, "_on_StartButton_pressed"))
 	pregame_start_tab.start_practice_button.connect("pressed", Callable(self, "_on_StartPractice_pressed"))
+
+	# Add "Play in Media Player" button to the bottom row, after Start Practice
+	var media_player_button = HBHovereableButton.new()
+	media_player_button.text = "Play in Media Player"
+	media_player_button.expand_icon = true
+	media_player_button.connect("pressed", Callable(self, "_on_play_in_media_player_pressed"))
+	button_container.add_child(media_player_button)
+	# Move it to be after Start Practice (index 1) and before Back
+	var practice_index = pregame_start_tab.start_practice_button.get_index()
+	button_container.move_child(media_player_button, practice_index + 1)
+
 	pregame_start_tab.back_button.connect("pressed", Callable(self, "_on_BackButton_pressed"))
 	pregame_start_tab.back_button.set_meta("sfx", HBGame.menu_back_sfx)
 	
@@ -466,6 +481,50 @@ func update_modifiers():
 func _on_add_modifier_pressed():
 	modifier_selector.popup()
 	tabbed_container.set_process_unhandled_input(false)
+
+func _on_play_in_media_player_pressed():
+	if current_song == null:
+		return
+
+	var audio_path = current_song.get_song_audio_res_path()
+	if audio_path.is_empty() or not FileAccess.file_exists(audio_path):
+		print("[PreGame] No audio file found for song: %s" % current_song.title)
+		return
+
+	# Load the default playlist (or last used)
+	var config = ConfigFile.new()
+	var playlist_name = MediaPlaylist.DEFAULT_PLAYLIST_NAME
+	var settings_path = "user://media_playlists/settings.cfg"
+	if config.load(settings_path) == OK:
+		playlist_name = config.get_value("media_player", "last_playlist", MediaPlaylist.DEFAULT_PLAYLIST_NAME)
+
+	var pl = MediaPlaylist.load_playlist(playlist_name)
+	if not pl:
+		pl = MediaPlaylist.new(playlist_name)
+
+	# Check if the song is already in the playlist by matching folder names
+	var song_folder = current_song.path.trim_suffix("/").get_file()
+	var found_index := -1
+	for i in range(pl.items.size()):
+		var item_folder = pl.items[i].audio_path.get_base_dir().get_file()
+		if item_folder == song_folder:
+			found_index = i
+			break
+
+	if found_index < 0:
+		# Add to playlist
+		var item = MediaItem.from_file(audio_path)
+		item.title = current_song.title
+		item.artist = current_song.artist
+		pl.add_item(item)
+		found_index = pl.items.size() - 1
+
+	# Set the playlist cursor to this song so it plays on entry
+	pl.current_index = found_index
+	pl.save()
+
+	# Navigate to the media player and start playback
+	change_to_menu("media_player", false, {"play_song": true})
 
 func _on_pack_selected(new_value):
 	var chosen_key := String(new_value)
