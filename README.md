@@ -41,16 +41,19 @@ Quality-of-life improvements that streamline the charting workflow:
 - **Quick-access toolbar buttons**: Edit Song Data, Verify Chart, Upload to Workshop
 - **Inspector calculated info**: See timeout, duration, hit count, and score for Rush notes
 - **Bookmarks system**: Annotate your charts with timestamped notes
-- **Icon pack switcher**: Change note icons without leaving the editor
+- **Icon and Resource pack switcher**: Change note icons and skins without leaving the editor
+- **Metadata Layer**: A new timing point layer is available in the Editor, for things like script signals and custom values set to anything you want
 - **Open in external editor**: Quick access to chart JSON files
 - **Plus dozens more** (Playhead controls, selection utilities, VFX Inspector and Summary, etc.)
 
 ### 🎮 New Gameplay Features
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
+- **Various Cosmetic Modifiers**: Disable the multi-line or set the global scale without VFX or leaving the PreGameScreen. All leaderboard-legal.
 - **VFX indicators**: See which songs have VFX before playing
+- **Enhanced Pre-Game Screen**: Icon and resource pack selector, VFX context stamp, Perfect Run helpers
 - **Additional Category Tabs**: Song list now includes 'Extend' and 'Favorites' tabs, with an 'Add to Favorites' option on every song list item
 - **Media Player**: Play any song in your Project Heartbeat library (Audio only)
-- **Editor Metadata Layer**: A new 'Metadata' layer is available in the Editor, for custom timing points (script signals!)
+- **Many more smaller features**: Restart/Quit option on fail, new SVG icons for Media Player, and more
 
 ---
 
