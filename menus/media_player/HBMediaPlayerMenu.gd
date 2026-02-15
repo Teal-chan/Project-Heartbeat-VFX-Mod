@@ -186,6 +186,19 @@ func _setup_file_dialog():
 func _on_menu_enter(force_hard_transition=false, args = {}):
 	super._on_menu_enter(force_hard_transition, args)
 
+	# If launched from PreGameScreen with a song to play, reload the playlist and start playback
+	if args.get("play_song", false):
+		# Reload the playlist to pick up any newly added items and cursor position
+		var last_playlist_name = _load_last_playlist_name()
+		playlist = MediaPlaylist.load_playlist(last_playlist_name)
+		if not playlist:
+			playlist = MediaPlaylist.new(MediaPlaylist.DEFAULT_PLAYLIST_NAME)
+		_rebuild_playlist_ui()
+
+		var item = playlist.get_current()
+		if item:
+			controller.play(item)
+
 
 func _on_menu_exit(force_hard_transition=false):
 	super._on_menu_exit(force_hard_transition)
