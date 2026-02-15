@@ -184,6 +184,12 @@ Feature request for a simple modifier. Leaderboard legal.
 
 ---
 
+## 🫀🫂 Giant and Tiny Notes modifiers
+
+Sets the global note size without leaving the pre-game screen. Leaderboard legal.
+
+---
+
 ## 🎵 Media Player
 
 An audio-only media player for any song in your Project Heartbeat library.
