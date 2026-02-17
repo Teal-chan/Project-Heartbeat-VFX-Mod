@@ -179,7 +179,7 @@ Perfect Run only makes the game harder, so scores are fully leaderboard-eligible
 
 ## 🎯 Technical Zone Modifier
 
-A Project Diva F 2nd-style challenge modifier where charters define score-gated segments.
+A Project Diva F-style challenge modifier where charters define score-gated segments.
 
 ### How It Works
 
