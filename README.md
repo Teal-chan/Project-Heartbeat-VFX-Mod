@@ -48,9 +48,9 @@ Quality-of-life improvements that streamline the charting workflow:
 
 ### 🎮 New Gameplay Features
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
+- **Technical Zone modifier**: F2nd-style score-gated challenge segments with configurable penalties (see detailed section below)
 - **Various Cosmetic Modifiers**: Disable the multi-line or set the global scale without VFX or leaving the PreGameScreen. All leaderboard-legal.
 - **VFX indicators**: See which songs have VFX before playing
-- **F2nd style Technical Zones**: Score-gated chart segments for tricky portions of your charts, with variable penalties.
 - **Enhanced Pre-Game Screen**: Icon and resource pack selector, VFX context stamp, Perfect Run helpers
 - **Additional Category Tabs**: Song list now includes 'Extend' and 'Favorites' tabs, with an 'Add to Favorites' option on every song list item
 - **Media Player**: Play any song in your Project Heartbeat library (Audio only)
@@ -174,6 +174,55 @@ A togglable on-screen counter displays:
 ### Leaderboard Legal
 
 Perfect Run only makes the game harder, so scores are fully leaderboard-eligible.
+
+---
+
+## 🎯 Technical Zone Modifier
+
+A Project Diva F 2nd-style challenge modifier where charters define score-gated segments.
+
+### How It Works
+
+Charters place **TZ start** and **TZ end** metadata markers in the editor to define challenge zones. During gameplay:
+- Miss any note in the zone (SAFE, SAD, WORST, or WRONG) → Zone fails
+- Zone failure applies a percentage penalty to your final score
+- Penalties are configurable per zone (0-30% cap across all zones)
+- Complete the zone → No penalty
+
+### For Charters
+
+**Placing Technical Zones:**
+
+1. Select the Metadata layer in the editor
+2. Add an `HBMetadata` timing point at the zone start
+3. Set `key` to "TZ start" and `value` to the penalty percentage (e.g., 10.0 for 10%)
+4. Add another metadata point at the zone end
+5. Set `key` to "TZ end" (value is ignored)
+
+**Best Practices:**
+- Use for genuinely challenging segments (tricky patterns, dense chords, complex slides)
+- Start with 5-10% penalties for most zones
+- Reserve 15-30% for the most brutal sections
+- The counter automatically displays note count for the zone
+
+### For Players
+
+**Gameplay:**
+- A styled panel appears in the upper-right when a zone activates
+- Shows "X / Y" progress as you hit notes
+- On failure: "Fail! -X%" displays in red
+- On success: "Complete!" displays in green
+- Final score reflects all penalties applied
+
+**Strategy:**
+- Penalties affect your final percentage and rating
+- A 10% penalty can drop EXCELLENT (95%+) to GREAT (<95%)
+- Multiple failed zones stack (up to 30% total penalty)
+- Practice zones individually in the editor's playtest mode
+
+### Leaderboard Legal
+
+Technical Zones only make the game harder, so scores are fully leaderboard-eligible. The penalty is stored in your result and visible on leaderboards.
 
 ---
 
@@ -314,7 +363,6 @@ This project exists thanks to the openness of EirTeam in making Project Heartbea
 ### Planned Features
 
 - Bezier curve support for Offset, Mirai Link and possibly Field Slide
-- Technical Zones (Signal hook and counter complete, tech zone scoring and behavior coming soon.)
 - YouTube tutorial series
 
 ### Reporting Issues
