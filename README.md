@@ -50,6 +50,7 @@ Quality-of-life improvements that streamline the charting workflow:
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
 - **Various Cosmetic Modifiers**: Disable the multi-line or set the global scale without VFX or leaving the PreGameScreen. All leaderboard-legal.
 - **VFX indicators**: See which songs have VFX before playing
+- **F2nd style Technical Zones**: Score-gated chart segments for tricky portions of your charts, with variable penalties.
 - **Enhanced Pre-Game Screen**: Icon and resource pack selector, VFX context stamp, Perfect Run helpers
 - **Additional Category Tabs**: Song list now includes 'Extend' and 'Favorites' tabs, with an 'Add to Favorites' option on every song list item
 - **Media Player**: Play any song in your Project Heartbeat library (Audio only)
