@@ -236,7 +236,7 @@ Feature request for a simple modifier. Leaderboard legal.
 
 ## 🫀🫂 Giant and Tiny Notes modifiers
 
-Sets the global note size to 1.8 'giant' or 0.6 'tiny' for visibility or challenge without leaving the pre-game screen. Leaderboard legal.
+Sets the global note size to 1.8 'giant' or 0.6 'tiny' for visibility or challenge without leaving the pre-game screen or use of shader-based VFX. Leaderboard legal.
 
 ---
 
