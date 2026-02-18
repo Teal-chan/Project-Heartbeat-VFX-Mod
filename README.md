@@ -350,9 +350,9 @@ Custom shaders handle visual transforms:
 
 All transforms are GPU-accelerated with proper pivot handling. Now optimized for integrated GPU (Steam Deck compatible.)
 
-### Leaderboard Legality
+### Leaderboard Legality for Modifiers!?
 
-All custom modifiers are flagged to be leaderboard-legal due to a change in the game's modifier check system. It now asks the modifiers if they are legal, and if even one of them doesn't answer, the run is disqualified.
+All custom modifiers are flagged to be leaderboard-legal due to a change in the game's modifier check system. It now asks the modifiers if they are legal (`static func 'is_leaderboard_legal?'`), and if even one of them doesn't answer, or answers `false,` the run is disqualified.
 
 ---
 
