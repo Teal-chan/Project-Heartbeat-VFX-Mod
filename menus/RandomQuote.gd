@@ -83,6 +83,16 @@ const QUOTES = [
 	"Don't ask why they call her Chernobyl", # Never ask Kami why they call her that
 	"LAS GRAPAS DONDE???", # Never ask guinii about that one vtuber
 	"Pick up that can", # HL2 reference
+	"Always blame Teal", # Hi I found this and had to mod it -Teal
+	"Now with 100% more visual effects!", # PH Extend
+	"Have you installed the VFX Toolbox today?", # PH Extend
+	"★ VFX", # PH Extend 
+	"It's not a bug, it's a feature (of Extend)", # PH Extend
+	"20,000 lines of code and counting", # PH Extend 
+	"From 'just another chart maker' to 'the mod guy'", # PH Extend 
+	"Extend your expectations", # PH Extend
+	"Baked into the .pck with love", # PH Extend
+	"An Idol in Teal approved!", # PH Extend
 ]
 
 const BIRTHDAYS = {
@@ -95,6 +105,9 @@ const BIRTHDAYS = {
 	[8, 02]: "Yahoo",
 	[31, 03]: "Lino",
 	[30, 05]: "Teal",
+	[25, 04]: "Bramndon",
+	[22, 07]: "Kyuuon",
+	[28, 01]: "mikurisu39_"
 }
 
 func _ready():
