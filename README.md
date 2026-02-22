@@ -218,7 +218,6 @@ Charters place **TZ start** and **TZ end** metadata markers in the editor to def
 - Penalties affect your final percentage and rating
 - A 10% penalty can drop EXCELLENT (95%+) to GREAT (<95%)
 - Multiple failed zones stack (up to 30% total penalty)
-- Practice zones individually in the editor's playtest mode
 
 ### Leaderboard Legal
 
