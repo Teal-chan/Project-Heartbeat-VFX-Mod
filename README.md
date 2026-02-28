@@ -339,6 +339,7 @@ ph_vfx.gd Modifier → Same AnimBank/Shaders
 - **Event cursor system**: O(1) amortized event tracking
 - **Deferred transform commit**: Batch scale+rotation+offset into single shader update
 - **Throttled heavy updates**: Spotlight overlay updates every other frame
+- **Divergent branch avoidance**: Updated with `mix` to work better on Steam Deck.
 
 ### Shader System
 
