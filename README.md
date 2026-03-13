@@ -363,6 +363,7 @@ This project exists thanks to the openness of EirTeam in making Project Heartbea
 ### Planned Features
 
 - Bezier curve support for Offset, Mirai Link and possibly Field Slide
+- A hidden surprise known only to Discord members
 - YouTube tutorial series
 
 ### Reporting Issues
