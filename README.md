@@ -363,6 +363,8 @@ This project exists thanks to the openness of EirTeam in making Project Heartbea
 ### Planned Features
 
 - Bezier curve support for Offset, Mirai Link and possibly Field Slide
+Slide
+- Expansion of Spotlight shader to a maximum of 5 instead of 2
 - A hidden surprise known only to Discord members
 - YouTube tutorial series
 
