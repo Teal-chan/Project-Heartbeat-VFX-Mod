@@ -1,4 +1,4 @@
-
+7
 <img width="1520" height="820" alt="Blank Logo Base 2" src="https://github.com/user-attachments/assets/d3a8c650-6ed0-4871-bca9-436cfd06d53f" />
 
 <img width="189" height="208" alt="scale" src="https://github.com/user-attachments/assets/629e8d95-0b73-4d3b-a8ec-a1533977b883" />
@@ -379,7 +379,6 @@ Please include:
 ### Known Issues
 
 - "Select All" crashes the editor if there are Metadata points
-points
 - Beta version brings back that pesky video desync bug (restarting fixes this live, but i'd rather pinpoint the proper cause)
 - Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
 
