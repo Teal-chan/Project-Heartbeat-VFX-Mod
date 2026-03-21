@@ -376,6 +376,13 @@ Please include:
 - Relevant log output
 - Chart/VFX files if applicable
 
+### Known Issues
+
+- "Select All" crashes the editor if there are Metadata points
+points
+- Beta version brings back that pesky video desync bug (restarting fixes this live, but i'd rather pinpoint the proper cause)
+- Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
+
 ---
 
 ## ⚠️ CAVEAT EMPTOR!
