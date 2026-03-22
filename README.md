@@ -381,6 +381,7 @@ Please include:
 - "Select All" crashes the editor if there are Metadata points
 - Beta version brings back that pesky video desync bug (restarting fixes this live, but i'd rather pinpoint the proper cause)
 - Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
+- Stopping play-in-editor during Hold End causes strange VFX artifacts (scrubbing away from the note fixes this)
 
 ---
 
