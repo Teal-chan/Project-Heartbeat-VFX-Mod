@@ -363,7 +363,6 @@ This project exists thanks to the openness of EirTeam in making Project Heartbea
 ### Planned Features
 
 - Bezier curve support for Offset, Mirai Link and possibly Field Slide
-Slide
 - Expansion of Spotlight shader to a maximum of 5 instead of 2
 - A hidden surprise known only to Discord members
 - YouTube tutorial series
@@ -382,7 +381,7 @@ Please include:
 - Beta version brings back that pesky video desync bug (restarting fixes this live, but i'd rather pinpoint the proper cause)
 - Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
 - Stopping play-in-editor during Hold End causes strange VFX artifacts (scrubbing away from the note fixes this)
-- Editor-side injector stutters and desyncs when the VFX file gets too full (it's that pesky orange VFX indicator on the notes, will try a 'dirty' flag approach instead)
+- Editor-side injector stutters and desyncs when the VFX file gets too full (high note count is affecting the Vfx scans)
 
 ---
 
