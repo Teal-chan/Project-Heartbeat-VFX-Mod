@@ -381,8 +381,7 @@ Please include:
 - Beta version brings back that pesky video desync bug (restarting fixes this live, but i'd rather pinpoint the proper cause)
 - Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
 - Stopping play-in-editor during Hold End causes strange VFX artifacts (scrubbing away from the note fixes this)
-- Editor-side injector stutters and desyncs when the VFX file gets too full (high note count is affecting the Vfx scans)
-
+- Editor-side injector stutters and desyncs when the VFX file gets too full (will try a reworking of our polling functions)
 ---
 
 ## ⚠️ CAVEAT EMPTOR!
