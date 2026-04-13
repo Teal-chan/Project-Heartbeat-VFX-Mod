@@ -380,7 +380,7 @@ Please include:
 - Beta version brings back that pesky video desync bug (Further testing reveals this only happens on nonstandard display resolution)
 - Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
 - Stopping play-in-editor during Hold End causes strange VFX artifacts (scrubbing away from the note fixes this)
-- Editor-side stutter bug is fixed but
+- Editor-side stutter bug is fixed but notes with a start time of -0 still cause animated VFX failure
 ---
 
 ## ⚠️ CAVEAT EMPTOR!
