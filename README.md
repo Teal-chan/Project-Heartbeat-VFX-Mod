@@ -49,6 +49,7 @@ Quality-of-life improvements that streamline the charting workflow:
 ### 🎮 New Gameplay Features
 - **Perfect Run modifier**: Fail on any non-passing hit, with optional FINE limits
 - **Technical Zone modifier**: Project Diva F-style score-gated challenge segments with configurable penalties (see detailed section below)
+- **Heartbeat Time modifier**: Project Diva F-style challenge segment with a fixed 30% penalty (see detailed section below)
 - **Various Cosmetic Modifiers**: Disable the chord line or set the global scale without VFX or leaving the PreGameScreen. All leaderboard-legal.
 - **VFX indicators**: See which songs have VFX before playing
 - **Enhanced Pre-Game Screen**: Icon and resource pack selector, VFX context stamp, Perfect Run helpers
