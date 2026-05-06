@@ -225,6 +225,12 @@ Technical Zones only make the game harder, so scores are fully leaderboard-eligi
 
 ---
 
+## 👑 Heartbeat Time Modifier
+
+A Project Diva F-style modifier similar to Chance Time. Further details coming soon.
+
+---
+
 ## 🚫 No-Laser Modifier
 
 A modifier that disables the connecting line between chord notes, without going to the options menu.
