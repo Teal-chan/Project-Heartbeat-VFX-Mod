@@ -270,7 +270,7 @@ Charters place **HBT start** metadata markers in the editor to define Heartbeat 
 
 ---
 
-## Leaderboard Legal
+### Leaderboard Legal
 
 Heartbeat Time only makes the game harder, so scores are fully leaderboard-eligible. The penalty is stored in your result and visible on leaderboards.
 ---
