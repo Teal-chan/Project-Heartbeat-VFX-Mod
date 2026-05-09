@@ -228,8 +228,51 @@ Technical Zones only make the game harder, so scores are fully leaderboard-eligi
 
 ## 👑 Heartbeat Time Modifier
 
-A Project Diva F-style modifier similar to Chance Time. Further details coming soon.
+A Project Diva F-style challenge modifier where charters define percentage-based accuracy zones.
 
+## How It Works
+
+Charters place **HBT start** metadata markers in the editor to define Heartbeat Time zones, and designate a Qualifier note using the Inspector checkbox. During gameplay:
+
+- Notes in the zone are evaluated as a percentage rather than individually
+- Hit the Qualifier chord and reach 75% or better → Zone passes
+- Failing the zone applies a fixed 30% penalty to your final score
+- Passing the zone → No penalty
+
+---
+
+## For Charters
+
+### Placing Heartbeat Time Zones:
+
+1. Select the Metadata layer in the editor
+2. Add an `HBMetadata` timing point at the zone start
+3. Set `key` to `"HBT start"`
+4. Select the intended Qualifier note and check the Qualifier checkbox in the Inspector
+5. The zone ends when the Qualifier note is detected during gameplay
+
+---
+
+## For Players
+
+### Gameplay:
+
+- A styled panel appears when a Heartbeat Time zone activates
+- The percentage counter turns rainbow when you reach 75%
+- On failure: **"Disqualified!"** displays in red
+- On success: **"X% Qualified!"** displays in green, where X is your actual zone percentage
+- Final score reflects all penalties applied
+
+### Strategy:
+
+- A failed zone applies a flat 30% penalty to your final percentage, typically resulting in a Standard or Cheap rating
+- Only one Heartbeat Time zone can be active at a time
+
+---
+
+## Leaderboard Legal
+
+Heartbeat Time only makes the game harder, so scores are fully leaderboard-eligible. The penalty is stored in your result and visible on leaderboards.
 ---
 
 ## 🚫 No-Laser Modifier
