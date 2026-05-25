@@ -291,6 +291,12 @@ Sets the global note size to 1.8 'giant' or 0.6 'tiny' for visibility or challen
 
 ---
 
+## Arcade Doubler modifier
+
+Feature request for a modifier that turns single inputs into doubles so arcade controllers can play console charts.
+Not leaderboard legal.
+---
+
 ## 🎵 Media Player
 
 An audio-only media player for any song in your Project Heartbeat library.
