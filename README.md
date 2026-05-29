@@ -62,12 +62,15 @@ Quality-of-life improvements that streamline the charting workflow:
 ## 📦 Installation
 
 > **Note**: This mod requires a legally purchased copy of Project Heartbeat. Please purchase the game on Steam if you want to play the mod.
+> **Warning**: The beta version is not 100% stable. It is recommended to use the RC5 build that accompanies the "Default" installation.
 
-0. Opt-in to the beta on Steam by clicking on 'Selected Version' and choosing 'beta' from the list of options.
+0. Opt-in to the beta on Steam by clicking on 'Selected Version' and choosing 'beta' from the list of options. (This step is only recommended for advanced users - you do not *have* to do this.)
 1. Browse your Local Files, find the "Project Heartbeat.pck" file, make a copy and back it up
-2. Replace it with the modded version here: https://drive.google.com/file/d/1qG8smIEVPfan_vYUYv2vCbGpMUP84_BV/view?usp=sharing
-3. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1sZYOaNW422hfEDS19S_9ce4QmMVBNVvB/view?usp=sharing
-3. Launch the game normally (Or preferably, from command prompt/terminal to see the console outputs)
+2. Replace it with the modded version here if you're opted into Beta: https://drive.google.com/file/d/1UGmbMxsxRg6E1FAZLLc70Ktl80Bb4rxn/view?usp=sharing
+3. Otherwise use this version for the Default installation: https://drive.google.com/file/d/1u4kJCYUGZw6lIOUBnx8ALrRQaJkjzDbR/view?usp=sharing
+4. Rename your executable to the corresponding .pck file name (so if you downloaded rc5, change the name of the Project Heartbeat executable to "Project Heartbeat Extend rc5".
+5. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1sZYOaNW422hfEDS19S_9ce4QmMVBNVvB/view?usp=sharing
+6. Launch the game from command prompt/terminal. Your Steam launch will throw an error since you renamed the executable.
 
 ---
 
