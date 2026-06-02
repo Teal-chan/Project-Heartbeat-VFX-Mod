@@ -70,7 +70,7 @@ Quality-of-life improvements that streamline the charting workflow:
 3. Otherwise use this version for the Default installation: https://drive.google.com/file/d/1u4kJCYUGZw6lIOUBnx8ALrRQaJkjzDbR/view?usp=sharing
 4. Rename your executable to the corresponding .pck file name (so if you downloaded rc5, change the name of the Project Heartbeat executable to "Project Heartbeat Extend rc5".
 5. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1sZYOaNW422hfEDS19S_9ce4QmMVBNVvB/view?usp=sharing
-6. Open a window to your local files, type 'cmd' in the path field, then type either "project heartbeat extend beta" or "project heartbeat extend rc5" (*with* quotes) to launch the game with the console visible.
+6. (Windows users) Open a window to your local files, type 'cmd' in the path field to open command prompt, then type either "project heartbeat extend beta" or "project heartbeat extend rc5" (*with* quotes) to launch the game with the console visible.
 
 ---
 
