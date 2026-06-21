@@ -65,7 +65,7 @@ Quality-of-life improvements that streamline the charting workflow:
 
 1. Opt-in to the beta on Steam by clicking on 'Selected Version' and choosing 'beta' from the list of options. 
 2. Browse your Local Files, find the "Project Heartbeat.pck" file, make a copy and back it up
-3. Replace it with the modded version here if you're opted into Beta: https://drive.google.com/file/d/1bBNKwmi9QSyf8tv_-sa1megRScNADdtD/view?usp=sharing
+3. Replace it with the modded version here: https://drive.google.com/file/d/1x-DF1IrO47sr6ZkObSoV6IAuuhltTkUg/view?usp=sharing
 4. Rename your executable to the corresponding .pck file name.
 5. Place the current version of the VFX Scripts into your editor_scripts folder (from Tools/Open User Directory in the game): https://drive.google.com/file/d/1hzwxoZkxJ56sWm-iWzdcglCCTMC3NFrc/view?usp=sharing
 6. (Windows users) Open a window to your local files, type 'cmd' in the path field to open command prompt, then type "project heartbeat extend" (*with* quotes) to launch the game with the console visible.
