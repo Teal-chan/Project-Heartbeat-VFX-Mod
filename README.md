@@ -437,9 +437,11 @@ Please include:
 ### Known Issues
 
 - Beta build video drift bug is mostly fixed except for a few hiccups on the editor side (hint, please don't try to play a whole VFX chart in the editor's playtest)
-- Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings
+- Nightcore modifier is incompatible with video drift fix (causes stutters and stops during gameplay and I have no way to fix it)
+- Favorites button does not yet properly work on Steam Deck due to a possible conflict in UserSettings (possibly fixed to include UserSettings)
 - Stopping play-in-editor during Hold End causes strange VFX artifacts (scrubbing away from the note fixes this)
 - Editor-side stutter bug is fixed but notes with a start time of -0 still cause animated VFX failure
+
 ---
 
 ## ⚠️ CAVEAT EMPTOR!
